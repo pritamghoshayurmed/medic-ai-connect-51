@@ -1,12 +1,13 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, Filter, ChevronLeft } from "lucide-react";
+import { Search, ChevronLeft } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import DoctorCard from "@/components/DoctorCard";
 import { Doctor } from "@/types";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   Dialog,
   DialogContent,
@@ -14,7 +15,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -26,85 +26,19 @@ import {
 import { Label } from "@/components/ui/label";
 import { Calendar } from "@/components/ui/calendar";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock data
-const mockDoctors: Doctor[] = [
-  {
-    id: "doc1",
-    name: "Dr. Sarah Johnson",
-    email: "sarah@example.com",
-    phone: "+1234567890",
-    role: "doctor",
-    specialty: "Cardiologist",
-    experience: 10,
-    hospital: "City Hospital",
-    rating: 4.8,
-  },
-  {
-    id: "doc2",
-    name: "Dr. Michael Chen",
-    email: "michael@example.com",
-    phone: "+1234567891",
-    role: "doctor",
-    specialty: "Neurologist",
-    experience: 8,
-    hospital: "General Medical Center",
-    rating: 4.5,
-  },
-  {
-    id: "doc3",
-    name: "Dr. Emily Williams",
-    email: "emily@example.com",
-    phone: "+1234567892",
-    role: "doctor",
-    specialty: "Pediatrician",
-    experience: 12,
-    hospital: "Children's Hospital",
-    rating: 4.9,
-  },
-  {
-    id: "doc4",
-    name: "Dr. James Wilson",
-    email: "james@example.com",
-    phone: "+1234567893",
-    role: "doctor",
-    specialty: "Dermatologist",
-    experience: 7,
-    hospital: "Skin & Care Clinic",
-    rating: 4.6,
-  },
-  {
-    id: "doc5",
-    name: "Dr. Lisa Rodriguez",
-    email: "lisa@example.com",
-    phone: "+1234567894",
-    role: "doctor",
-    specialty: "Psychiatrist",
-    experience: 9,
-    hospital: "Mental Health Center",
-    rating: 4.7,
-  },
-];
-
-const specialties = [
-  "All",
-  "Cardiologist",
-  "Neurologist",
-  "Pediatrician",
-  "Dermatologist",
-  "Psychiatrist",
-  "Orthopedic",
-  "Ophthalmologist",
-  "Gynecologist",
-];
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function FindDoctor() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>("All");
-  const [filteredDoctors, setFilteredDoctors] = useState(mockDoctors);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
+  const [specialties, setSpecialties] = useState<{id: string, name: string}[]>([]);
+  const [loading, setLoading] = useState(true);
   
   // Booking state
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
@@ -113,8 +47,79 @@ export default function FindDoctor() {
   const [bookingReason, setBookingReason] = useState<string>("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  useEffect(() => {
+    // Fetch doctors and specialties
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Fetch specialties
+        const { data: specialtiesData, error: specialtiesError } = await supabase
+          .from('specialties')
+          .select('*');
+
+        if (specialtiesError) throw specialtiesError;
+        setSpecialties([{id: 'all', name: 'All'}, ...specialtiesData]);
+
+        // Fetch doctors with their profiles and specialties
+        const { data: doctorProfiles, error: doctorsError } = await supabase
+          .from('doctor_profiles')
+          .select(`
+            id,
+            specialty_id,
+            experience_years,
+            consultation_fee,
+            available_days,
+            available_hours,
+            qualification,
+            rating,
+            about,
+            profiles:id (
+              full_name,
+              email,
+              phone,
+              role
+            ),
+            specialties:specialty_id (
+              name
+            )
+          `);
+
+        if (doctorsError) throw doctorsError;
+
+        // Format the doctors data
+        const formattedDoctors: Doctor[] = doctorProfiles.map(doc => ({
+          id: doc.id,
+          name: doc.profiles.full_name,
+          email: doc.profiles.email,
+          phone: doc.profiles.phone,
+          role: 'doctor',
+          specialty: doc.specialties ? doc.specialties.name : 'General Practitioner',
+          experience: doc.experience_years,
+          hospital: '',
+          rating: doc.rating || 4.5,
+          education: doc.qualification,
+          profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+        }));
+
+        setDoctors(formattedDoctors);
+        setFilteredDoctors(formattedDoctors);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load doctors data. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [toast]);
+
   const handleSearch = () => {
-    let results = mockDoctors;
+    let results = [...doctors];
     
     if (searchQuery) {
       results = results.filter(
@@ -133,13 +138,17 @@ export default function FindDoctor() {
     setFilteredDoctors(results);
   };
 
+  useEffect(() => {
+    handleSearch();
+  }, [searchQuery, selectedSpecialty]);
+
   const handleBookAppointment = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
     setIsDialogOpen(true);
   };
 
-  const confirmBooking = () => {
-    if (!bookingDate || !bookingTime) {
+  const confirmBooking = async () => {
+    if (!bookingDate || !bookingTime || !user || !selectedDoctor) {
       toast({
         title: "Missing information",
         description: "Please select both date and time for your appointment.",
@@ -148,20 +157,72 @@ export default function FindDoctor() {
       return;
     }
 
-    // Here you would normally save the appointment to your backend
-    toast({
-      title: "Appointment Booked!",
-      description: `Your appointment with ${selectedDoctor?.name} has been scheduled.`,
-    });
-    
-    setIsDialogOpen(false);
-    setSelectedDoctor(null);
-    setBookingDate(undefined);
-    setBookingTime("");
-    setBookingReason("");
-    
-    navigate("/patient/appointments");
+    try {
+      // Format date and time
+      const formattedDate = bookingDate.toISOString().split('T')[0];
+
+      // Insert appointment into database
+      const { data, error } = await supabase
+        .from('appointments')
+        .insert({
+          patient_id: user.id,
+          doctor_id: selectedDoctor.id,
+          appointment_date: formattedDate,
+          appointment_time: bookingTime,
+          symptoms: bookingReason,
+          status: 'pending'
+        })
+        .select();
+
+      if (error) throw error;
+
+      // Create notifications for both patient and doctor
+      await supabase
+        .from('notifications')
+        .insert([
+          {
+            user_id: user.id,
+            title: 'Appointment Booked',
+            message: `Your appointment with ${selectedDoctor.name} has been scheduled for ${formattedDate} at ${bookingTime}.`,
+            type: 'appointment'
+          },
+          {
+            user_id: selectedDoctor.id,
+            title: 'New Appointment',
+            message: `${user.name} has booked an appointment for ${formattedDate} at ${bookingTime}.`,
+            type: 'appointment'
+          }
+        ]);
+
+      toast({
+        title: "Appointment Booked!",
+        description: `Your appointment with ${selectedDoctor.name} has been scheduled.`,
+      });
+      
+      setIsDialogOpen(false);
+      setSelectedDoctor(null);
+      setBookingDate(undefined);
+      setBookingTime("");
+      setBookingReason("");
+      
+      navigate("/patient/appointments");
+    } catch (error) {
+      console.error("Error booking appointment:", error);
+      toast({
+        title: "Booking Failed",
+        description: "There was an error booking your appointment. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-24">
@@ -181,25 +242,19 @@ export default function FindDoctor() {
             placeholder="Search by name, specialty..."
             className="pl-10"
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              handleSearch();
-            }}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         
         <div className="flex space-x-2 overflow-x-auto pb-2 hide-scrollbar">
           {specialties.map((specialty) => (
             <Button
-              key={specialty}
-              variant={selectedSpecialty === specialty ? "default" : "outline"}
+              key={specialty.id}
+              variant={selectedSpecialty === specialty.name ? "default" : "outline"}
               className="flex-shrink-0"
-              onClick={() => {
-                setSelectedSpecialty(specialty);
-                handleSearch();
-              }}
+              onClick={() => setSelectedSpecialty(specialty.name)}
             >
-              {specialty}
+              {specialty.name}
             </Button>
           ))}
         </div>

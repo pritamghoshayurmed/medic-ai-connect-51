@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { ChevronLeft, Send, Paperclip, Mic } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Message {
   id: string;
@@ -15,49 +17,30 @@ interface Message {
   isAI?: boolean;
 }
 
-// Mock doctor and patient IDs
-const MOCK_DOCTOR_ID = "doc1";
-const MOCK_PATIENT_ID = "pat1";
 const MOCK_AI_ID = "ai";
-
-// Mock messages
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    content: "Hello, how can I help you today?",
-    senderId: MOCK_DOCTOR_ID,
-    timestamp: new Date(Date.now() - 60 * 60 * 1000), // 1 hour ago
-  },
-  {
-    id: "2",
-    content: "I've been having headaches and dizziness for the past few days.",
-    senderId: MOCK_PATIENT_ID,
-    timestamp: new Date(Date.now() - 55 * 60 * 1000), // 55 mins ago
-  },
-  {
-    id: "3",
-    content: "I'm sorry to hear that. How severe are the headaches and how long do they last?",
-    senderId: MOCK_DOCTOR_ID,
-    timestamp: new Date(Date.now() - 50 * 60 * 1000), // 50 mins ago
-  },
-];
 
 export default function Chat() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
+  const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [receiverName, setReceiverName] = useState("Dr. Sarah Johnson");
+  const [receiverName, setReceiverName] = useState("");
   const [isAIChat, setIsAIChat] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [receiverId, setReceiverId] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user) return;
+
     // Check if this is an AI chat
     if (id === "ai") {
       setIsAIChat(true);
       setReceiverName("AI Health Assistant");
+      setIsLoading(false);
       
       // Set initial AI greeting if there are no messages
       if (messages.length === 0) {
@@ -71,8 +54,66 @@ export default function Chat() {
           },
         ]);
       }
+    } else if (id) {
+      // Fetch the other user's details
+      const fetchReceiverDetails = async () => {
+        try {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', id)
+            .single();
+
+          if (error) throw error;
+
+          setReceiverName(profile.full_name);
+          setReceiverId(profile.id);
+
+          // Fetch chat history
+          await fetchChatHistory();
+        } catch (error) {
+          console.error("Error fetching receiver details:", error);
+          toast({
+            title: "Error",
+            description: "Failed to load chat details.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      fetchReceiverDetails();
     }
-  }, [id, messages.length]);
+  }, [id, user]);
+
+  const fetchChatHistory = async () => {
+    if (!user || !id) return;
+
+    try {
+      // Query for messages between these two users
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .or(`senderId.eq.${user.id},receiverId.eq.${user.id}`)
+        .or(`senderId.eq.${id},receiverId.eq.${id}`)
+        .order('timestamp', { ascending: true });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const formattedMessages: Message[] = data.map(msg => ({
+          id: msg.id,
+          content: msg.content,
+          senderId: msg.senderId,
+          timestamp: new Date(msg.timestamp),
+        }));
+        setMessages(formattedMessages);
+      }
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+    }
+  };
 
   useEffect(() => {
     scrollToBottom();
@@ -82,42 +123,65 @@ export default function Chat() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleSendMessage = () => {
-    if (!newMessage.trim()) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() || !user) return;
 
     const userMessage: Message = {
       id: Date.now().toString(),
       content: newMessage,
-      senderId: user?.id || MOCK_PATIENT_ID,
+      senderId: user.id,
       timestamp: new Date(),
     };
 
     setMessages([...messages, userMessage]);
     setNewMessage("");
 
-    // Simulate response for demo
-    setTimeout(() => {
-      let responseMessage: Message;
-      
-      if (isAIChat) {
-        responseMessage = {
+    if (isAIChat) {
+      // Handle AI chat
+      setTimeout(() => {
+        const aiResponse: Message = {
           id: (Date.now() + 1).toString(),
           content: getAIResponse(newMessage),
           senderId: MOCK_AI_ID,
           timestamp: new Date(),
           isAI: true,
         };
-      } else {
-        responseMessage = {
-          id: (Date.now() + 1).toString(),
-          content: "I'll look into this and get back to you soon. Is there anything else you'd like to add?",
-          senderId: id || MOCK_DOCTOR_ID,
-          timestamp: new Date(),
-        };
+        
+        setMessages(prev => [...prev, aiResponse]);
+      }, 1000);
+    } else if (receiverId) {
+      // Save message to database
+      try {
+        const { error } = await supabase
+          .from('messages')
+          .insert({
+            senderId: user.id,
+            receiverId: receiverId,
+            content: newMessage,
+            timestamp: new Date().toISOString(),
+            read: false
+          });
+
+        if (error) throw error;
+
+        // Create a notification for the receiver
+        await supabase
+          .from('notifications')
+          .insert({
+            user_id: receiverId,
+            title: "New Message",
+            message: `${user.name} sent you a message`,
+            type: "message"
+          });
+      } catch (error) {
+        console.error("Error sending message:", error);
+        toast({
+          title: "Error",
+          description: "Failed to send message.",
+          variant: "destructive",
+        });
       }
-      
-      setMessages((prev) => [...prev, responseMessage]);
-    }, 1000);
+    }
   };
 
   // Simple AI response generator for demo
@@ -139,6 +203,14 @@ export default function Chat() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen">
       {/* Header */}
@@ -157,7 +229,7 @@ export default function Chat() {
       {/* Messages */}
       <div className="flex-grow overflow-y-auto p-4 bg-gray-50">
         {messages.map((message) => {
-          const isUserMessage = message.senderId === user?.id || message.senderId === MOCK_PATIENT_ID;
+          const isUserMessage = message.senderId === user?.id;
           
           return (
             <div

@@ -1,6 +1,9 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, UserRole } from "../types";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Session } from "@supabase/supabase-js";
 
 interface AuthContextType {
   user: User | null;
@@ -15,73 +18,129 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(null);
+  const { toast } = useToast();
 
-  // Check if user is already logged in
+  // Check if user is already logged in and set up auth state listener
   useEffect(() => {
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        if (session?.user) {
+          try {
+            // Get profile data
+            const { data: profile, error: profileError } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', session.user.id)
+              .single();
+
+            if (profileError) throw profileError;
+
+            // Create user object from profile
+            const userData: User = {
+              id: profile.id,
+              name: profile.full_name,
+              email: profile.email,
+              phone: profile.phone || '',
+              role: profile.role as UserRole,
+            };
+
+            // If role is doctor, get doctor profile data
+            if (profile.role === 'doctor') {
+              const { data: doctorProfile, error: doctorError } = await supabase
+                .from('doctor_profiles')
+                .select('*')
+                .eq('id', profile.id)
+                .single();
+
+              if (!doctorError && doctorProfile) {
+                userData.profilePic = '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png';
+              }
+            }
+
+            setUser(userData);
+          } catch (error) {
+            console.error("Error fetching user profile:", error);
+          }
+        } else {
+          setUser(null);
+        }
+        setIsLoading(false);
+      }
+    );
+
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (!session) {
+        setIsLoading(false);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  // Mock login function
   const login = async (email: string, password: string, role: UserRole) => {
     setIsLoading(true);
     try {
-      // In a real app, this would be an API call
-      // For now, we'll just simulate a login
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Generate a mock user
-      const mockUser: User = {
-        id: Math.random().toString(36).substring(7),
-        name: role === 'doctor' ? 'Dr. Jane Smith' : 'John Doe',
+      const { error } = await supabase.auth.signInWithPassword({
         email,
-        phone: '+1234567890',
-        role,
-        profilePic: role === 'doctor' ? '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png' : undefined
-      };
-      
-      setUser(mockUser);
-      localStorage.setItem("user", JSON.stringify(mockUser));
-    } catch (error) {
-      console.error("Login failed:", error);
+        password
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast({
+        title: "Login failed",
+        description: error.message,
+        variant: "destructive",
+      });
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Mock signup function
   const signup = async (name: string, email: string, password: string, role: UserRole, phone: string) => {
     setIsLoading(true);
     try {
-      // In a real app, this would be an API call
-      // For now, we'll just simulate a signup
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const newUser: User = {
-        id: Math.random().toString(36).substring(7),
-        name,
+      const { error } = await supabase.auth.signUp({
         email,
-        phone,
-        role
-      };
-      
-      setUser(newUser);
-      localStorage.setItem("user", JSON.stringify(newUser));
-    } catch (error) {
-      console.error("Signup failed:", error);
+        password,
+        options: {
+          data: {
+            full_name: name,
+            role,
+            phone
+          }
+        }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Signup successful",
+        description: "Please check your email to confirm your account.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Signup failed",
+        description: error.message,
+        variant: "destructive",
+      });
       throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await supabase.auth.signOut();
     setUser(null);
-    localStorage.removeItem("user");
   };
 
   return (

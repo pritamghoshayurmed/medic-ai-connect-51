@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,95 +8,86 @@ import BottomNavigation from "@/components/BottomNavigation";
 import AppointmentCard from "@/components/AppointmentCard";
 import { Appointment, Patient } from "@/types";
 import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-
-// Mock data
-const mockPatients: Patient[] = [
-  {
-    id: "pat1",
-    name: "John Doe",
-    email: "john@example.com",
-    phone: "+1234567890",
-    role: "patient",
-    dateOfBirth: "1980-05-15",
-    bloodType: "A+",
-  },
-  {
-    id: "pat2",
-    name: "Jane Smith",
-    email: "jane@example.com",
-    phone: "+1234567891",
-    role: "patient",
-    dateOfBirth: "1992-10-20",
-    bloodType: "O-",
-  },
-  {
-    id: "pat3",
-    name: "Robert Johnson",
-    email: "robert@example.com",
-    phone: "+1234567892",
-    role: "patient",
-    dateOfBirth: "1975-03-08",
-    bloodType: "B+",
-  },
-];
-
-const mockAppointments: (Appointment & { patient: Patient })[] = [
-  {
-    id: "apt1",
-    patientId: "pat1",
-    doctorId: "doc1",
-    date: "2025-04-10",
-    time: "10:00 AM",
-    status: "confirmed",
-    reason: "Regular checkup",
-    patient: mockPatients[0],
-  },
-  {
-    id: "apt2",
-    patientId: "pat2",
-    doctorId: "doc1",
-    date: "2025-04-10",
-    time: "11:30 AM",
-    status: "confirmed",
-    reason: "Headaches",
-    patient: mockPatients[1],
-  },
-  {
-    id: "apt3",
-    patientId: "pat3",
-    doctorId: "doc1",
-    date: "2025-04-15",
-    time: "2:00 PM",
-    status: "pending",
-    reason: "Back pain",
-    patient: mockPatients[2],
-  },
-  {
-    id: "apt4",
-    patientId: "pat1",
-    doctorId: "doc1",
-    date: "2025-03-28",
-    time: "9:30 AM",
-    status: "completed",
-    reason: "Follow-up checkup",
-    patient: mockPatients[0],
-  },
-  {
-    id: "apt5",
-    patientId: "pat2",
-    doctorId: "doc1",
-    date: "2025-03-20",
-    time: "3:00 PM",
-    status: "cancelled",
-    reason: "Skin rash",
-    patient: mockPatients[1],
-  },
-];
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 
 export default function DoctorAppointments() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [appointments, setAppointments] = useState(mockAppointments);
+  const [appointments, setAppointments] = useState<(Appointment & { patient: Patient })[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch doctor's appointments
+    const fetchAppointments = async () => {
+      if (!user) return;
+
+      setLoading(true);
+      try {
+        // Get all appointments for this doctor
+        const { data, error } = await supabase
+          .from('appointments')
+          .select(`
+            id,
+            patient_id,
+            appointment_date,
+            appointment_time,
+            status,
+            symptoms,
+            profiles:patient_id (
+              id,
+              full_name,
+              email,
+              phone,
+              role
+            )
+          `)
+          .eq('doctor_id', user.id)
+          .order('appointment_date', { ascending: true });
+
+        if (error) throw error;
+
+        // Format the appointments data
+        const formattedAppointments = data.map(apt => {
+          const patientProfile = apt.profiles;
+          
+          return {
+            id: apt.id,
+            patientId: apt.patient_id,
+            doctorId: user.id,
+            date: apt.appointment_date,
+            time: apt.appointment_time,
+            status: apt.status,
+            reason: apt.symptoms,
+            patient: {
+              id: patientProfile.id,
+              name: patientProfile.full_name,
+              email: patientProfile.email,
+              phone: patientProfile.phone,
+              role: 'patient'
+            }
+          };
+        });
+
+        setAppointments(formattedAppointments);
+      } catch (error) {
+        console.error("Error fetching appointments:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load appointments. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAppointments();
+  }, [user, toast]);
 
   const upcomingAppointments = appointments.filter(
     (apt) => apt.status === "confirmed" || apt.status === "pending"
@@ -117,6 +108,43 @@ export default function DoctorAppointments() {
       aptDate.getFullYear() === selectedDate.getFullYear()
     );
   });
+
+  // Update appointment status
+  const updateAppointmentStatus = async (appointmentId: string, status: 'confirmed' | 'completed' | 'cancelled') => {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+
+      // Update local state
+      setAppointments(appointments.map(apt => 
+        apt.id === appointmentId ? { ...apt, status } : apt
+      ));
+
+      toast({
+        title: "Status Updated",
+        description: `Appointment status has been updated to ${status}.`,
+      });
+    } catch (error) {
+      console.error("Error updating appointment status:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update appointment status. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-24">
@@ -164,11 +192,39 @@ export default function DoctorAppointments() {
           
           {filteredAppointments.length > 0 ? (
             filteredAppointments.map((appointment) => (
-              <AppointmentCard
-                key={appointment.id}
-                appointment={appointment}
-                person={appointment.patient}
-              />
+              <div key={appointment.id} className="mb-4">
+                <AppointmentCard
+                  appointment={appointment}
+                  person={appointment.patient}
+                />
+                {appointment.status === "pending" && (
+                  <div className="flex gap-2 mt-2">
+                    <Button 
+                      variant="outline" 
+                      className="flex-1"
+                      onClick={() => updateAppointmentStatus(appointment.id, "confirmed")}
+                    >
+                      Confirm
+                    </Button>
+                    <Button 
+                      variant="destructive" 
+                      className="flex-1"
+                      onClick={() => updateAppointmentStatus(appointment.id, "cancelled")}
+                    >
+                      Decline
+                    </Button>
+                  </div>
+                )}
+                {appointment.status === "confirmed" && (
+                  <Button 
+                    variant="outline" 
+                    className="w-full mt-2"
+                    onClick={() => updateAppointmentStatus(appointment.id, "completed")}
+                  >
+                    Mark as Completed
+                  </Button>
+                )}
+              </div>
             ))
           ) : (
             <div className="text-center py-8 bg-gray-50 rounded-lg">

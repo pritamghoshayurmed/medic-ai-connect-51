@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,92 +8,92 @@ import BottomNavigation from "@/components/BottomNavigation";
 import AppointmentCard from "@/components/AppointmentCard";
 import { Appointment, Doctor } from "@/types";
 import { useToast } from "@/hooks/use-toast";
-
-// Mock data
-const mockDoctors: Doctor[] = [
-  {
-    id: "doc1",
-    name: "Dr. Sarah Johnson",
-    email: "sarah@example.com",
-    phone: "+1234567890",
-    role: "doctor",
-    specialty: "Cardiologist",
-    experience: 10,
-    hospital: "City Hospital",
-    rating: 4.8,
-  },
-  {
-    id: "doc2",
-    name: "Dr. Michael Chen",
-    email: "michael@example.com",
-    phone: "+1234567891",
-    role: "doctor",
-    specialty: "Neurologist",
-    experience: 8,
-    hospital: "General Medical Center",
-    rating: 4.5,
-  },
-  {
-    id: "doc3",
-    name: "Dr. Emily Williams",
-    email: "emily@example.com",
-    phone: "+1234567892",
-    role: "doctor",
-    specialty: "Pediatrician",
-    experience: 12,
-    hospital: "Children's Hospital",
-    rating: 4.9,
-  },
-];
-
-const mockAppointments: (Appointment & { doctor: Doctor })[] = [
-  {
-    id: "apt1",
-    patientId: "pat1",
-    doctorId: "doc1",
-    date: "2025-04-10",
-    time: "10:00 AM",
-    status: "confirmed",
-    reason: "Regular checkup",
-    doctor: mockDoctors[0],
-  },
-  {
-    id: "apt2",
-    patientId: "pat1",
-    doctorId: "doc2",
-    date: "2025-04-15",
-    time: "2:30 PM",
-    status: "pending",
-    reason: "Headaches",
-    doctor: mockDoctors[1],
-  },
-  {
-    id: "apt3",
-    patientId: "pat1",
-    doctorId: "doc3",
-    date: "2025-03-27",
-    time: "11:00 AM",
-    status: "completed",
-    reason: "Flu symptoms",
-    doctor: mockDoctors[2],
-  },
-  {
-    id: "apt4",
-    patientId: "pat1",
-    doctorId: "doc1",
-    date: "2025-03-05",
-    time: "9:00 AM",
-    status: "cancelled",
-    reason: "Vaccination",
-    doctor: mockDoctors[0],
-  },
-];
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Appointments() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   
-  const [appointments, setAppointments] = useState(mockAppointments);
+  const [appointments, setAppointments] = useState<(Appointment & { doctor: Doctor })[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Fetch user's appointments
+    const fetchAppointments = async () => {
+      if (!user) return;
+
+      setLoading(true);
+      try {
+        // Get all appointments for this patient
+        const { data, error } = await supabase
+          .from('appointments')
+          .select(`
+            id,
+            doctor_id,
+            appointment_date,
+            appointment_time,
+            status,
+            symptoms,
+            doctor_profiles!appointments_doctor_id_fkey (
+              experience_years,
+              consultation_fee,
+              rating,
+              profiles:id (
+                full_name,
+                email,
+                phone,
+                role
+              )
+            )
+          `)
+          .eq('patient_id', user.id)
+          .order('appointment_date', { ascending: true });
+
+        if (error) throw error;
+
+        // Format the appointments data
+        const formattedAppointments = data.map(apt => {
+          const doctorProfile = apt.doctor_profiles;
+          
+          return {
+            id: apt.id,
+            patientId: user.id,
+            doctorId: apt.doctor_id,
+            date: apt.appointment_date,
+            time: apt.appointment_time,
+            status: apt.status,
+            reason: apt.symptoms,
+            doctor: {
+              id: apt.doctor_id,
+              name: doctorProfile.profiles.full_name,
+              email: doctorProfile.profiles.email,
+              phone: doctorProfile.profiles.phone,
+              role: 'doctor',
+              specialty: 'Doctor', // We'll need to join with specialties table to get this
+              experience: doctorProfile.experience_years,
+              rating: doctorProfile.rating,
+              profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+            }
+          };
+        });
+
+        setAppointments(formattedAppointments);
+      } catch (error) {
+        console.error("Error fetching appointments:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load appointments. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAppointments();
+  }, [user, toast]);
 
   const upcomingAppointments = appointments.filter(
     (apt) => apt.status === "confirmed" || apt.status === "pending"
@@ -103,18 +103,44 @@ export default function Appointments() {
     (apt) => apt.status === "completed" || apt.status === "cancelled"
   );
 
-  const handleCancelAppointment = (appointmentId: string) => {
-    setAppointments(
-      appointments.map((apt) =>
-        apt.id === appointmentId ? { ...apt, status: "cancelled" } : apt
-      )
-    );
-    
-    toast({
-      title: "Appointment Cancelled",
-      description: "Your appointment has been cancelled successfully.",
-    });
+  const handleCancelAppointment = async (appointmentId: string) => {
+    try {
+      // Update appointment status in the database
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status: 'cancelled' })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+
+      // Update local state
+      setAppointments(
+        appointments.map((apt) =>
+          apt.id === appointmentId ? { ...apt, status: "cancelled" } : apt
+        )
+      );
+      
+      toast({
+        title: "Appointment Cancelled",
+        description: "Your appointment has been cancelled successfully.",
+      });
+    } catch (error) {
+      console.error("Error cancelling appointment:", error);
+      toast({
+        title: "Error",
+        description: "Failed to cancel appointment. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-24">
