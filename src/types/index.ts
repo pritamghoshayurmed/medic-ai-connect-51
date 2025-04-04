@@ -65,8 +65,8 @@ export interface MedicalReport {
 
 export interface Message {
   id: string;
-  senderId: string;
-  receiverId: string;
+  sender_id: string;
+  receiver_id: string;
   content: string;
   timestamp: string;
   read: boolean;

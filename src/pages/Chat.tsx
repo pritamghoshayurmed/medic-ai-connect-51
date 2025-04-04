@@ -8,14 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-
-interface Message {
-  id: string;
-  content: string;
-  senderId: string;
-  timestamp: Date;
-  isAI?: boolean;
-}
+import { Message } from "@/types";
 
 const MOCK_AI_ID = "ai";
 
@@ -48,9 +41,10 @@ export default function Chat() {
           {
             id: "ai1",
             content: "Hello! I'm your AI health assistant. How can I help you today?",
-            senderId: MOCK_AI_ID,
-            timestamp: new Date(),
-            isAI: true,
+            sender_id: MOCK_AI_ID,
+            receiver_id: user.id,
+            timestamp: new Date().toISOString(),
+            read: false,
           },
         ]);
       }
@@ -95,8 +89,8 @@ export default function Chat() {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
-        .or(`senderId.eq.${user.id},receiverId.eq.${user.id}`)
-        .or(`senderId.eq.${id},receiverId.eq.${id}`)
+        .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+        .or(`sender_id.eq.${id},receiver_id.eq.${id}`)
         .order('timestamp', { ascending: true });
 
       if (error) throw error;
@@ -105,8 +99,10 @@ export default function Chat() {
         const formattedMessages: Message[] = data.map(msg => ({
           id: msg.id,
           content: msg.content,
-          senderId: msg.senderId,
-          timestamp: new Date(msg.timestamp),
+          sender_id: msg.sender_id,
+          receiver_id: msg.receiver_id,
+          timestamp: msg.timestamp,
+          read: msg.read,
         }));
         setMessages(formattedMessages);
       }
@@ -129,8 +125,10 @@ export default function Chat() {
     const userMessage: Message = {
       id: Date.now().toString(),
       content: newMessage,
-      senderId: user.id,
-      timestamp: new Date(),
+      sender_id: user.id,
+      receiver_id: isAIChat ? MOCK_AI_ID : (receiverId || ""),
+      timestamp: new Date().toISOString(),
+      read: false,
     };
 
     setMessages([...messages, userMessage]);
@@ -142,9 +140,10 @@ export default function Chat() {
         const aiResponse: Message = {
           id: (Date.now() + 1).toString(),
           content: getAIResponse(newMessage),
-          senderId: MOCK_AI_ID,
-          timestamp: new Date(),
-          isAI: true,
+          sender_id: MOCK_AI_ID,
+          receiver_id: user.id,
+          timestamp: new Date().toISOString(),
+          read: false,
         };
         
         setMessages(prev => [...prev, aiResponse]);
@@ -155,8 +154,8 @@ export default function Chat() {
         const { error } = await supabase
           .from('messages')
           .insert({
-            senderId: user.id,
-            receiverId: receiverId,
+            sender_id: user.id,
+            receiver_id: receiverId,
             content: newMessage,
             timestamp: new Date().toISOString(),
             read: false
@@ -199,8 +198,8 @@ export default function Chat() {
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const formatTime = (date: string) => {
+    return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   if (isLoading) {
@@ -229,7 +228,7 @@ export default function Chat() {
       {/* Messages */}
       <div className="flex-grow overflow-y-auto p-4 bg-gray-50">
         {messages.map((message) => {
-          const isUserMessage = message.senderId === user?.id;
+          const isUserMessage = message.sender_id === user?.id;
           
           return (
             <div
@@ -244,7 +243,7 @@ export default function Chat() {
                   "p-3 rounded-lg",
                   isUserMessage
                     ? "bg-primary text-white rounded-tr-none"
-                    : message.isAI
+                    : message.sender_id === MOCK_AI_ID
                     ? "bg-blue-100 text-blue-900 rounded-tl-none"
                     : "bg-white text-gray-800 rounded-tl-none shadow"
                 )}

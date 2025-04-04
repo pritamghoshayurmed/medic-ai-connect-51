@@ -55,13 +55,34 @@ export default function DoctorAppointments() {
         const formattedAppointments = data.map(apt => {
           const patientProfile = apt.profiles;
           
+          // Map the database status to our app's status type
+          let typedStatus: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+          
+          switch(apt.status) {
+            case 'pending': 
+              typedStatus = 'pending';
+              break;
+            case 'confirmed': 
+              typedStatus = 'confirmed';
+              break;
+            case 'cancelled': 
+              typedStatus = 'cancelled';
+              break;
+            case 'completed': 
+              typedStatus = 'completed';
+              break;
+            default:
+              // Default to pending if unknown status
+              typedStatus = 'pending';
+          }
+          
           return {
             id: apt.id,
             patientId: apt.patient_id,
             doctorId: user.id,
             date: apt.appointment_date,
             time: apt.appointment_time,
-            status: apt.status,
+            status: typedStatus,
             reason: apt.symptoms,
             patient: {
               id: patientProfile.id,
