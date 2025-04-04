@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -89,7 +88,7 @@ export default function DoctorAppointments() {
               name: patientProfile.full_name,
               email: patientProfile.email,
               phone: patientProfile.phone,
-              role: 'patient'
+              role: 'patient' as const
             }
           };
         });

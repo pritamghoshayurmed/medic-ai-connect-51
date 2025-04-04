@@ -91,7 +91,7 @@ export default function Appointments() {
               name: doctorProfile.profiles.full_name,
               email: doctorProfile.profiles.email,
               phone: doctorProfile.profiles.phone,
-              role: 'doctor',
+              role: 'doctor' as const, // Use a const assertion to ensure it's of the exact type
               specialty: 'Doctor', // We'll need to join with specialties table to get this
               experience: doctorProfile.experience_years,
               rating: doctorProfile.rating,

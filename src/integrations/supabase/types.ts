@@ -120,6 +120,48 @@ export type Database = {
           },
         ]
       }
+      messages: {
+        Row: {
+          content: string
+          id: string
+          read: boolean | null
+          receiver_id: string
+          sender_id: string
+          timestamp: string | null
+        }
+        Insert: {
+          content: string
+          id?: string
+          read?: boolean | null
+          receiver_id: string
+          sender_id: string
+          timestamp?: string | null
+        }
+        Update: {
+          content?: string
+          id?: string
+          read?: boolean | null
+          receiver_id?: string
+          sender_id?: string
+          timestamp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       notifications: {
         Row: {
           created_at: string | null
