@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -57,52 +56,77 @@ export default function FindDoctor() {
           .from('specialties')
           .select('*');
 
-        if (specialtiesError) throw specialtiesError;
-        setSpecialties([{id: 'all', name: 'All'}, ...specialtiesData]);
+        if (specialtiesError) {
+          console.error("Error fetching specialties:", specialtiesError);
+          setSpecialties([{id: 'all', name: 'All'}]);
+        } else {
+          setSpecialties([{id: 'all', name: 'All'}, ...specialtiesData]);
+        }
 
-        // Fetch doctors with their profiles and specialties
+        // Fetch doctors with their profiles and specialties using a more reliable approach
         const { data: doctorProfiles, error: doctorsError } = await supabase
-          .from('doctor_profiles')
+          .from('profiles')
           .select(`
             id,
-            specialty_id,
-            experience_years,
-            consultation_fee,
-            available_days,
-            available_hours,
-            qualification,
-            rating,
-            about,
-            profiles:id (
-              full_name,
-              email,
-              phone,
-              role
-            ),
-            specialties:specialty_id (
-              name
+            full_name,
+            email,
+            phone,
+            role,
+            doctor_profiles!inner(
+              id,
+              specialty_id,
+              experience_years,
+              consultation_fee,
+              available_days,
+              available_hours,
+              qualification,
+              rating,
+              about
             )
-          `);
+          `)
+          .eq('role', 'doctor');
 
-        if (doctorsError) throw doctorsError;
+        if (doctorsError) {
+          console.error("Error fetching doctors:", doctorsError);
+          throw doctorsError;
+        }
 
-        // Format the doctors data
-        const formattedDoctors: Doctor[] = doctorProfiles.map(doc => ({
-          id: doc.id,
-          name: doc.profiles.full_name,
-          email: doc.profiles.email,
-          phone: doc.profiles.phone,
-          role: 'doctor',
-          specialty: doc.specialties ? doc.specialties.name : 'General Practitioner',
-          experience: doc.experience_years,
-          hospital: '',
-          rating: doc.rating || 4.5,
-          education: doc.qualification,
-          profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
-        }));
+        // Now fetch specialties for each doctor if needed
+        const doctorsWithSpecialties = await Promise.all(
+          doctorProfiles.map(async (doc) => {
+            const specialtyId = doc.doctor_profiles.specialty_id;
+            let specialtyName = 'General Practitioner';
+            
+            if (specialtyId) {
+              const { data: specialtyData } = await supabase
+                .from('specialties')
+                .select('name')
+                .eq('id', specialtyId)
+                .single();
+                
+              if (specialtyData) {
+                specialtyName = specialtyData.name;
+              }
+            }
+            
+            return {
+              id: doc.id,
+              name: doc.full_name,
+              email: doc.email,
+              phone: doc.phone || '',
+              role: 'doctor',
+              specialty: specialtyName,
+              experience: doc.doctor_profiles.experience_years || 0,
+              hospital: '',
+              rating: doc.doctor_profiles.rating || 4.5,
+              education: doc.doctor_profiles.qualification || '',
+              profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+            };
+          })
+        );
 
-        setDoctors(formattedDoctors);
-        setFilteredDoctors(formattedDoctors);
+        setDoctors(doctorsWithSpecialties);
+        setFilteredDoctors(doctorsWithSpecialties);
       } catch (error) {
         console.error("Error fetching data:", error);
         toast({
@@ -110,6 +134,9 @@ export default function FindDoctor() {
           description: "Failed to load doctors data. Please try again.",
           variant: "destructive",
         });
+        // Set empty arrays to prevent further errors
+        setDoctors([]);
+        setFilteredDoctors([]);
       } finally {
         setLoading(false);
       }

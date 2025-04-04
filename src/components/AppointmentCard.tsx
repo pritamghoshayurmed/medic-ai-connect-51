@@ -1,4 +1,3 @@
-
 import { Appointment, Doctor, Patient } from "@/types";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, Video, MessageSquare } from "lucide-react";
@@ -11,13 +10,15 @@ interface AppointmentCardProps {
   person: Doctor | Patient;
   onCancel?: () => void;
   onReschedule?: () => void;
+  onChat?: () => void;
 }
 
 export default function AppointmentCard({ 
   appointment, 
   person, 
   onCancel, 
-  onReschedule 
+  onReschedule,
+  onChat 
 }: AppointmentCardProps) {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -45,6 +46,14 @@ export default function AppointmentCard({
       return format(date, "MMM dd, yyyy");
     } catch (error) {
       return appointment.date;
+    }
+  };
+
+  const handleChatClick = () => {
+    if (onChat) {
+      onChat();
+    } else {
+      navigate(`/chat/${isDoctor ? appointment.patientId : appointment.doctorId}`);
     }
   };
 
@@ -91,7 +100,7 @@ export default function AppointmentCard({
           variant="outline" 
           size="sm" 
           className="flex-1 gap-1"
-          onClick={() => navigate(`${basePath}/chat/${isDoctor ? appointment.patientId : appointment.doctorId}`)}
+          onClick={handleChatClick}
         >
           <MessageSquare className="w-4 h-4" /> Chat
         </Button>

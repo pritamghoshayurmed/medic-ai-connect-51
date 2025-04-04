@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -51,24 +50,23 @@ export default function Chat() {
     const fetchMessages = async () => {
       setLoading(true);
       try {
-        // Get messages for this conversation
+        // Direct query to get messages between users
         const { data, error } = await supabase
           .from('messages')
           .select('*')
-          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-          .or(`sender_id.eq.${userId},receiver_id.eq.${userId}`)
+          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
           .order('timestamp', { ascending: true });
-
+            
         if (error) throw error;
-
+          
         // Format messages to match our app's type
-        const formattedMessages: Message[] = data.map(msg => ({
+        const formattedMessages: Message[] = data.map((msg: any) => ({
           id: msg.id,
           sender_id: msg.sender_id,
           receiver_id: msg.receiver_id,
           content: msg.content,
-          timestamp: msg.timestamp,
-          read: msg.read
+          timestamp: msg.timestamp || new Date().toISOString(),
+          read: msg.read || false
         }));
 
         setMessages(formattedMessages);
@@ -107,8 +105,8 @@ export default function Chat() {
               sender_id: newMsg.sender_id,
               receiver_id: newMsg.receiver_id,
               content: newMsg.content,
-              timestamp: newMsg.timestamp,
-              read: newMsg.read
+              timestamp: newMsg.timestamp || new Date().toISOString(),
+              read: newMsg.read || false
             },
           ]);
         }
@@ -129,13 +127,17 @@ export default function Chat() {
     if (!newMessage.trim() || !user || !userId) return;
 
     try {
+      const messageData = {
+        sender_id: user.id,
+        receiver_id: userId,
+        content: newMessage,
+        read: false,
+        timestamp: new Date().toISOString()
+      };
+
       const { error } = await supabase
         .from('messages')
-        .insert({
-          sender_id: user.id,
-          receiver_id: userId,
-          content: newMessage,
-        });
+        .insert(messageData);
 
       if (error) throw error;
 
@@ -144,11 +146,7 @@ export default function Chat() {
         ...messages,
         {
           id: crypto.randomUUID(), // temp id
-          sender_id: user.id,
-          receiver_id: userId,
-          content: newMessage,
-          timestamp: new Date().toISOString(),
-          read: false
+          ...messageData
         },
       ]);
       

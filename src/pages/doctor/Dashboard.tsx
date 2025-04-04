@@ -1,14 +1,15 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Calendar, Users, Activity, FileSearch, User } from "lucide-react";
+import { Calendar, Users, Activity, FileSearch } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Appointment, Patient } from "@/types";
 import AppointmentCard from "@/components/AppointmentCard";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import {
   ResponsiveContainer,
   BarChart,
@@ -19,86 +20,187 @@ import {
   CartesianGrid,
 } from "recharts";
 
-// Mock data
-const mockPatients: Patient[] = [
-  {
-    id: "pat1",
-    name: "John Doe",
-    email: "john@example.com",
-    phone: "+1234567890",
-    role: "patient",
-    dateOfBirth: "1980-05-15",
-    bloodType: "A+",
-  },
-  {
-    id: "pat2",
-    name: "Jane Smith",
-    email: "jane@example.com",
-    phone: "+1234567891",
-    role: "patient",
-    dateOfBirth: "1992-10-20",
-    bloodType: "O-",
-  },
-  {
-    id: "pat3",
-    name: "Robert Johnson",
-    email: "robert@example.com",
-    phone: "+1234567892",
-    role: "patient",
-    dateOfBirth: "1975-03-08",
-    bloodType: "B+",
-  },
-];
-
-const mockAppointments: (Appointment & { patient: Patient })[] = [
-  {
-    id: "apt1",
-    patientId: "pat1",
-    doctorId: "doc1",
-    date: "2025-04-10",
-    time: "10:00 AM",
-    status: "confirmed",
-    reason: "Regular checkup",
-    patient: mockPatients[0],
-  },
-  {
-    id: "apt2",
-    patientId: "pat2",
-    doctorId: "doc1",
-    date: "2025-04-10",
-    time: "11:30 AM",
-    status: "confirmed",
-    reason: "Headaches",
-    patient: mockPatients[1],
-  },
-  {
-    id: "apt3",
-    patientId: "pat3",
-    doctorId: "doc1",
-    date: "2025-04-10",
-    time: "2:00 PM",
-    status: "pending",
-    reason: "Back pain",
-    patient: mockPatients[2],
-  },
-];
-
-const weeklyStats = [
-  { day: "Mon", patients: 8 },
-  { day: "Tue", patients: 12 },
-  { day: "Wed", patients: 10 },
-  { day: "Thu", patients: 15 },
-  { day: "Fri", patients: 11 },
-  { day: "Sat", patients: 6 },
-  { day: "Sun", patients: 0 },
-];
+// Get current date in YYYY-MM-DD format
+const getTodayDateString = () => {
+  const today = new Date();
+  return today.toISOString().split('T')[0];
+};
 
 export default function DoctorDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { toast } = useToast();
   
-  const [todayAppointments, setTodayAppointments] = useState(mockAppointments);
-  const [upcomingAppointments, setUpcomingAppointments] = useState(mockAppointments);
+  const [todayAppointments, setTodayAppointments] = useState<(Appointment & { patient: Patient })[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<(Appointment & { patient: Patient })[]>([]);
+  const [weeklyStats, setWeeklyStats] = useState<{ day: string; patients: number }[]>([]);
+  const [totalPatients, setTotalPatients] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        // Get today's date in YYYY-MM-DD format
+        const todayDate = getTodayDateString();
+        
+        // Fetch today's appointments
+        const { data: todayData, error: todayError } = await supabase
+          .from('appointments')
+          .select(`
+            id,
+            patient_id,
+            appointment_date,
+            appointment_time,
+            status,
+            symptoms
+          `)
+          .eq('doctor_id', user.id)
+          .eq('appointment_date', todayDate)
+          .order('appointment_time', { ascending: true });
+
+        if (todayError) throw todayError;
+
+        // Fetch upcoming appointments (excluding today)
+        const { data: upcomingData, error: upcomingError } = await supabase
+          .from('appointments')
+          .select(`
+            id,
+            patient_id,
+            appointment_date,
+            appointment_time,
+            status,
+            symptoms
+          `)
+          .eq('doctor_id', user.id)
+          .gt('appointment_date', todayDate)
+          .in('status', ['pending', 'confirmed'])
+          .order('appointment_date', { ascending: true })
+          .order('appointment_time', { ascending: true })
+          .limit(5);
+
+        if (upcomingError) throw upcomingError;
+
+        // Fetch patient details for all appointments
+        const patientIds = new Set([
+          ...todayData.map(apt => apt.patient_id),
+          ...upcomingData.map(apt => apt.patient_id)
+        ]);
+
+        // Fetch patient profiles in bulk
+        const { data: patientProfiles, error: patientError } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', Array.from(patientIds));
+
+        if (patientError) throw patientError;
+
+        // Create a map of patient profiles for easy access
+        const patientMap = new Map(
+          patientProfiles.map(profile => [profile.id, profile])
+        );
+
+        // Format appointments with patient data
+        const formatAppointments = (appointments: any[]) => {
+          return appointments.map(apt => {
+            const patientProfile = patientMap.get(apt.patient_id);
+            if (!patientProfile) return null;
+
+            // Map the database status to our app's status type
+            let typedStatus: 'pending' | 'confirmed' | 'cancelled' | 'completed';
+            
+            switch(apt.status) {
+              case 'pending': 
+                typedStatus = 'pending';
+                break;
+              case 'confirmed': 
+                typedStatus = 'confirmed';
+                break;
+              case 'cancelled': 
+                typedStatus = 'cancelled';
+                break;
+              case 'completed': 
+                typedStatus = 'completed';
+                break;
+              default:
+                typedStatus = 'pending';
+            }
+            
+            return {
+              id: apt.id,
+              patientId: apt.patient_id,
+              doctorId: user.id,
+              date: apt.appointment_date,
+              time: apt.appointment_time,
+              status: typedStatus,
+              reason: apt.symptoms || "General checkup",
+              patient: {
+                id: patientProfile.id,
+                name: patientProfile.full_name,
+                email: patientProfile.email,
+                phone: patientProfile.phone || "",
+                role: 'patient' as const
+              }
+            };
+          }).filter(Boolean) as (Appointment & { patient: Patient })[];
+        };
+
+        setTodayAppointments(formatAppointments(todayData));
+        setUpcomingAppointments(formatAppointments(upcomingData));
+
+        // Calculate weekly stats (appointments count for last 7 days)
+        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const today = new Date();
+        const weekStats = [];
+
+        for (let i = 6; i >= 0; i--) {
+          const date = new Date();
+          date.setDate(today.getDate() - i);
+          const dayName = days[date.getDay()];
+          const dateString = date.toISOString().split('T')[0];
+
+          // Fetch count of appointments for this day
+          const { count, error: countError } = await supabase
+            .from('appointments')
+            .select('*', { count: 'exact', head: true })
+            .eq('doctor_id', user.id)
+            .eq('appointment_date', dateString);
+
+          if (countError) throw countError;
+
+          weekStats.push({
+            day: dayName,
+            patients: count || 0
+          });
+        }
+
+        setWeeklyStats(weekStats);
+
+        // Get total unique patients
+        const { count: patientCount, error: countError } = await supabase
+          .from('appointments')
+          .select('patient_id', { count: 'exact', head: true })
+          .eq('doctor_id', user.id);
+
+        if (countError) throw countError;
+        setTotalPatients(patientCount || 0);
+
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard data",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, [user, toast]);
 
   return (
     <div className="pb-24">
@@ -121,7 +223,7 @@ export default function DoctorDashboard() {
           </div>
           <div className="bg-white bg-opacity-10 rounded-lg p-3">
             <p className="text-white text-opacity-80 text-sm">Total Patients</p>
-            <p className="text-xl font-bold">124</p>
+            <p className="text-xl font-bold">{totalPatients}</p>
           </div>
         </div>
       </div>
@@ -169,15 +271,21 @@ export default function DoctorDashboard() {
             <CardTitle className="text-lg">Weekly Stats</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={weeklyStats}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="day" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="patients" fill="#2563EB" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <div className="flex items-center justify-center h-48">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={weeklyStats}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="day" />
+                  <YAxis />
+                  <Tooltip />
+                  <Bar dataKey="patients" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -193,12 +301,17 @@ export default function DoctorDashboard() {
           {/* Today's Appointments */}
           <TabsContent value="today">
             <h3 className="font-bold mb-3">Today's Appointments</h3>
-            {todayAppointments.length > 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : todayAppointments.length > 0 ? (
               todayAppointments.map((appointment) => (
                 <AppointmentCard
                   key={appointment.id}
                   appointment={appointment}
                   person={appointment.patient}
+                  onChat={() => navigate(`/chat/${appointment.patientId}`)}
                 />
               ))
             ) : (
@@ -211,12 +324,17 @@ export default function DoctorDashboard() {
           {/* Upcoming Appointments */}
           <TabsContent value="upcoming">
             <h3 className="font-bold mb-3">Upcoming Appointments</h3>
-            {upcomingAppointments.length > 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : upcomingAppointments.length > 0 ? (
               upcomingAppointments.map((appointment) => (
                 <AppointmentCard
                   key={appointment.id}
                   appointment={appointment}
                   person={appointment.patient}
+                  onChat={() => navigate(`/chat/${appointment.patientId}`)}
                 />
               ))
             ) : (
