@@ -58,19 +58,20 @@ async function createTables() {
     console.log("Creating profiles table...");
     
     // Use raw SQL queries via RPC
-    const { error: createProfilesError } = await supabase.rpc('execute_sql', {
-      sql_query: `
-        CREATE TABLE IF NOT EXISTS profiles (
-          id UUID PRIMARY KEY REFERENCES auth.users(id),
-          email TEXT NOT NULL,
-          full_name TEXT NOT NULL,
-          phone TEXT,
-          role TEXT NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-        );
-      `
-    });
+    const { error: createProfilesError } = await supabase
+      .rpc('execute_sql', {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS profiles (
+            id UUID PRIMARY KEY REFERENCES auth.users(id),
+            email TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            phone TEXT,
+            role TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+          );
+        `
+      });
     
     if (createProfilesError) {
       console.error("Error creating profiles table:", createProfilesError);
@@ -78,20 +79,21 @@ async function createTables() {
     
     // Create patient_medical_info table if it doesn't exist yet
     console.log("Creating patient_medical_info table...");
-    const { error: createPatientMedicalInfoError } = await supabase.rpc('execute_sql', {
-      sql_query: `
-        CREATE TABLE IF NOT EXISTS patient_medical_info (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          patient_id UUID REFERENCES profiles(id) NOT NULL,
-          blood_type TEXT,
-          allergies TEXT[] DEFAULT '{}',
-          chronic_conditions TEXT[] DEFAULT '{}',
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-          UNIQUE(patient_id)
-        );
-      `
-    });
+    const { error: createPatientMedicalInfoError } = await supabase
+      .rpc('execute_sql', {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS patient_medical_info (
+            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            patient_id UUID REFERENCES profiles(id) NOT NULL,
+            blood_type TEXT,
+            allergies TEXT[] DEFAULT '{}',
+            chronic_conditions TEXT[] DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+            UNIQUE(patient_id)
+          );
+        `
+      });
     
     if (createPatientMedicalInfoError) {
       console.error("Error creating patient_medical_info table:", createPatientMedicalInfoError);
@@ -109,28 +111,29 @@ async function createTables() {
 export async function initializeUserTriggers() {
   try {
     // Use RPC to create the user triggers
-    const { error: initError } = await supabase.rpc('execute_sql', {
-      sql_query: `
-        CREATE OR REPLACE FUNCTION public.handle_new_user()
-        RETURNS TRIGGER AS $$
-        BEGIN
-          INSERT INTO public.profiles (id, email, full_name, role)
-          VALUES (
-            NEW.id,
-            NEW.email,
-            COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
-            COALESCE(NEW.raw_user_meta_data->>'role', 'patient')
-          );
-          RETURN NEW;
-        END;
-        $$ LANGUAGE plpgsql SECURITY DEFINER;
+    const { error: initError } = await supabase
+      .rpc('execute_sql', {
+        sql_query: `
+          CREATE OR REPLACE FUNCTION public.handle_new_user()
+          RETURNS TRIGGER AS $$
+          BEGIN
+            INSERT INTO public.profiles (id, email, full_name, role)
+            VALUES (
+              NEW.id,
+              NEW.email,
+              COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+              COALESCE(NEW.raw_user_meta_data->>'role', 'patient')
+            );
+            RETURN NEW;
+          END;
+          $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-        DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-        CREATE TRIGGER on_auth_user_created
-          AFTER INSERT ON auth.users
-          FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-      `
-    });
+          DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+          CREATE TRIGGER on_auth_user_created
+            AFTER INSERT ON auth.users
+            FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+        `
+      });
     
     if (initError) {
       console.error("Error initializing user triggers:", initError);

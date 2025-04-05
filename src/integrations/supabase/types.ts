@@ -200,6 +200,44 @@ export type Database = {
           },
         ]
       }
+      patient_medical_info: {
+        Row: {
+          allergies: string[] | null
+          blood_type: string | null
+          chronic_conditions: string[] | null
+          created_at: string | null
+          id: string
+          patient_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          allergies?: string[] | null
+          blood_type?: string | null
+          chronic_conditions?: string[] | null
+          created_at?: string | null
+          id?: string
+          patient_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          allergies?: string[] | null
+          blood_type?: string | null
+          chronic_conditions?: string[] | null
+          created_at?: string | null
+          id?: string
+          patient_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_medical_info_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null

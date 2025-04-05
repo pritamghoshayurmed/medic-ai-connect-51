@@ -1,3 +1,4 @@
+
 export type UserRole = 'patient' | 'doctor';
 
 export interface User {

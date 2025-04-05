@@ -26,7 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PatientProfile } from "@/types";
+import type { PatientProfile, PatientMedicalInfo } from "@/types";
 
 export default function PatientProfile() {
   const navigate = useNavigate();
@@ -219,68 +219,35 @@ export default function PatientProfile() {
         
       if (checkError) {
         console.error("Error checking medical info:", checkError);
-        
-        // Try to create the table using RPC if needed
-        if (checkError.message.includes("does not exist")) {
-          const { error: createError } = await supabase.rpc('execute_sql', {
-            sql_query: `
-              CREATE TABLE IF NOT EXISTS patient_medical_info (
-                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-                patient_id UUID REFERENCES profiles(id) NOT NULL,
-                blood_type TEXT,
-                allergies TEXT[],
-                chronic_conditions TEXT[],
-                created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-                updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-                UNIQUE(patient_id)
-              );
-            `
-          });
-          
-          if (createError) {
-            console.error("Failed to create table:", createError);
-            throw createError;
-          }
-        } else {
-          throw checkError;
-        }
+        throw checkError;
       }
       
       // Now try to insert or update the data
       if (!count) {
-        // Insert new record directly using SQL
-        const { error: insertError } = await supabase.rpc('execute_sql', {
-          sql_query: `
-            INSERT INTO patient_medical_info (
-              patient_id, 
-              blood_type, 
-              allergies, 
-              chronic_conditions
-            ) VALUES (
-              '${user.id}',
-              ${medicalInfo.blood_type ? `'${medicalInfo.blood_type}'` : 'NULL'},
-              ARRAY[${allergiesArray.map(a => `'${a}'`).join(',')}],
-              ARRAY[${conditionsArray.map(c => `'${c}'`).join(',')}]
-            );
-          `
-        });
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from('patient_medical_info')
+          .insert({
+            patient_id: user.id,
+            blood_type: medicalInfo.blood_type || null,
+            allergies: allergiesArray,
+            chronic_conditions: conditionsArray
+          });
           
         if (insertError) {
           console.error("Insert error:", insertError);
           throw insertError;
         }
       } else {
-        // Update existing record using SQL
-        const { error: updateError } = await supabase.rpc('execute_sql', {
-          sql_query: `
-            UPDATE patient_medical_info
-            SET 
-              blood_type = ${medicalInfo.blood_type ? `'${medicalInfo.blood_type}'` : 'NULL'},
-              allergies = ARRAY[${allergiesArray.map(a => `'${a}'`).join(',')}],
-              chronic_conditions = ARRAY[${conditionsArray.map(c => `'${c}'`).join(',')}]
-            WHERE patient_id = '${user.id}';
-          `
-        });
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('patient_medical_info')
+          .update({
+            blood_type: medicalInfo.blood_type || null,
+            allergies: allergiesArray,
+            chronic_conditions: conditionsArray
+          })
+          .eq('patient_id', user.id);
           
         if (updateError) {
           console.error("Update error:", updateError);
