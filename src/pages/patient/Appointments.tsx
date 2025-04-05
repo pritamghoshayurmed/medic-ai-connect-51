@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -71,18 +72,20 @@ export default function Appointments() {
           const formattedAppointments = data.map(appt => {
             const doctorId = appt.doctor_id || '';
             
-            const doctorProfile = appt.doctor || {};
+            // Cast to any to avoid TypeScript errors with dynamic data from Supabase
+            const doctor = appt.doctor as any || {};
             const doctorSpecialtyData = 
-              appt.doctor_specialty?.doctor_profiles?.[0] || {};
+              ((appt.doctor_specialty as any)?.doctor_profiles?.[0]) || {};
             
-            const doctor: Doctor = {
-              id: typeof doctorProfile.id === 'string' ? doctorProfile.id : doctorId,
-              name: typeof doctorProfile.full_name === 'string' ? doctorProfile.full_name : 'Unknown Doctor',
-              email: typeof doctorProfile.email === 'string' ? doctorProfile.email : '',
-              phone: typeof doctorProfile.phone === 'string' ? doctorProfile.phone : '',
+            // Create the doctor object with safe type assertions
+            const doctorObj: Doctor = {
+              id: doctor.id as string || doctorId,
+              name: doctor.full_name as string || 'Unknown Doctor',
+              email: doctor.email as string || '',
+              phone: doctor.phone as string || '',
               role: 'doctor' as const,
-              specialty: typeof doctorSpecialtyData.specialty === 'string' ? doctorSpecialtyData.specialty : 'General Practitioner',
-              experience: typeof doctorSpecialtyData.experience_years === 'number' ? doctorSpecialtyData.experience_years : 0,
+              specialty: doctorSpecialtyData.specialty as string || 'General Practitioner',
+              experience: Number(doctorSpecialtyData.experience_years) || 0,
               profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png',
             };
             
@@ -94,7 +97,7 @@ export default function Appointments() {
               time: appt.appointment_time,
               status: (appt.status || 'pending') as "pending" | "confirmed" | "cancelled" | "completed",
               reason: appt.symptoms || '',
-              doctor
+              doctor: doctorObj
             };
           });
         
@@ -289,5 +292,83 @@ export default function Appointments() {
         }}
       />
     ));
+  }
+  
+  function getFilteredAppointments() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    switch (activeTab) {
+      case "upcoming":
+        return appointments.filter(appt => {
+          const apptDate = new Date(appt.date);
+          return (apptDate >= today || appt.status === 'pending') && 
+                 appt.status !== 'completed' && 
+                 appt.status !== 'cancelled';
+        });
+        
+      case "past":
+        return appointments.filter(appt => {
+          const apptDate = new Date(appt.date);
+          return apptDate < today || 
+                 appt.status === 'completed' || 
+                 appt.status === 'cancelled';
+        });
+        
+      case "all":
+      default:
+        return appointments;
+    }
+  }
+  
+  function handleCancel(appointmentId: string) {
+    setSelectedAppointment(appointmentId);
+    setCancelDialogOpen(true);
+  }
+  
+  function confirmCancel() {
+    if (!selectedAppointment) return;
+    
+    setIsCancelling(true);
+    
+    try {
+      supabase
+        .from('appointments')
+        .update({ status: 'cancelled', cancellation_reason: cancelReason })
+        .eq('id', selectedAppointment)
+        .eq('patient_id', user?.id)
+        .then(({ error }) => {
+          if (error) throw error;
+          
+          setAppointments(prev => prev.map(appt => 
+            appt.id === selectedAppointment 
+              ? { ...appt, status: 'cancelled' as const } 
+              : appt
+          ));
+          
+          toast({
+            title: "Appointment cancelled",
+            description: "Your appointment has been successfully cancelled",
+          });
+          
+          setCancelDialogOpen(false);
+          setCancelReason("");
+          setSelectedAppointment(null);
+        })
+        .catch((error) => {
+          console.error("Error cancelling appointment:", error);
+          toast({
+            title: "Error",
+            description: "Failed to cancel appointment. Please try again.",
+            variant: "destructive"
+          });
+        })
+        .finally(() => {
+          setIsCancelling(false);
+        });
+    } catch (error) {
+      console.error("Error cancelling appointment:", error);
+      setIsCancelling(false);
+    }
   }
 }
