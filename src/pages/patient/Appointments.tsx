@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,7 +11,10 @@ import { supabase } from "@/integrations/supabase/client";
 import AppointmentCard from "@/components/AppointmentCard";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Appointment, Doctor, UserRole } from "@/types";
-import { asUserRole } from "@/utils/typeHelpers";
+
+interface AppointmentWithDoctor extends Appointment {
+  doctor: Doctor;
+}
 
 export default function Appointments() {
   const navigate = useNavigate();
@@ -18,7 +22,7 @@ export default function Appointments() {
   const { user } = useAuth();
   
   const [activeTab, setActiveTab] = useState("upcoming");
-  const [appointments, setAppointments] = useState<(Appointment & { doctor?: Doctor })[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentWithDoctor[]>([]);
   const [loading, setLoading] = useState(true);
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<string | null>(null);
@@ -65,16 +69,16 @@ export default function Appointments() {
         if (data) {
           const formattedAppointments = data.map(appt => {
             const doctorProfile = appt.profiles || {};
-            const doctorSpecialty = appt.doctor_profiles?.[0] || {};
+            const doctorSpecialtyData = appt.doctor_profiles?.[0] || {};
             
-            const doctor = {
+            const doctor: Doctor = {
               id: doctorProfile.id || appt.doctor_id,
               name: doctorProfile.full_name || 'Unknown Doctor',
               email: doctorProfile.email || '',
               phone: doctorProfile.phone || '',
-              role: 'doctor' as UserRole,
-              specialty: doctorSpecialty.specialty || 'General Practitioner',
-              experience: doctorSpecialty.experience_years || 0,
+              role: 'doctor',
+              specialty: doctorSpecialtyData.specialty || 'General Practitioner',
+              experience: doctorSpecialtyData.experience_years || 0,
               profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png',
             };
             
@@ -150,7 +154,7 @@ export default function Appointments() {
       
       setAppointments(prev => prev.map(appt => 
         appt.id === selectedAppointment 
-          ? { ...appt, status: 'cancelled' } 
+          ? { ...appt, status: 'cancelled' as const } 
           : appt
       ));
       
@@ -272,13 +276,7 @@ export default function Appointments() {
       <AppointmentCard
         key={appointment.id}
         appointment={appointment}
-        person={appointment.doctor || {
-          id: appointment.doctorId,
-          name: "Dr. Unknown",
-          email: "",
-          phone: "",
-          role: "doctor"
-        }}
+        person={appointment.doctor}
         showCancelButton={appointment.status !== 'cancelled' && appointment.status !== 'completed'}
         onCancel={() => handleCancel(appointment.id)}
         onChat={() => navigate(`/patient/chat/${appointment.doctorId}`)}

@@ -8,9 +8,8 @@ import DoctorCard from "@/components/DoctorCard";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Appointment, Doctor, UserRole } from "@/types";
+import { Appointment, Doctor } from "@/types";
 import { format } from "date-fns";
-import { asUserRole } from "@/utils/typeHelpers";
 
 export default function PatientDashboard() {
   const navigate = useNavigate();
@@ -81,7 +80,7 @@ export default function PatientDashboard() {
             name: doc.full_name,
             email: doc.email,
             phone: doc.phone || '',
-            role: asUserRole(doc.role),
+            role: 'doctor' as const, // Use a const assertion to ensure type safety
             specialty: doc.doctor_profiles?.[0]?.specialty || 'General Practitioner', 
             experience: doc.doctor_profiles?.[0]?.experience_years || 5,
             rating: 4.8, // Default value
@@ -171,7 +170,7 @@ export default function PatientDashboard() {
                 name: "Dr. Smith",
                 email: "doctor@example.com",
                 phone: "",
-                role: "doctor" as UserRole,
+                role: "doctor",
                 specialty: "General Practitioner"
               }}
               onCancel={() => {

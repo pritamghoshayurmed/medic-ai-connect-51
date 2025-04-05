@@ -97,7 +97,7 @@ export interface DoctorProfile {
     rating?: number;
     total_reviews?: number;
     specialty_id?: string;
-  }[];
+  };
   specialty?: {
     id: string;
     name: string;

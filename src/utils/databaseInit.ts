@@ -26,8 +26,11 @@ export async function initializeDatabase() {
       .from('doctor_profiles')
       .insert({
         id: '00000000-0000-0000-0000-000000000000',
-        specialty: 'System',
-        experience_years: 0
+        experience_years: 0,
+        available_days: ['Monday'],
+        available_hours: {},
+        consultation_fee: 0,
+        qualification: 'System'
       })
       .select()
       .single();
@@ -36,7 +39,7 @@ export async function initializeDatabase() {
       console.error("Error creating doctor_profiles table:", doctorProfilesError);
     }
     
-    // Create appointments table
+    // Check appointments table
     const { error: appointmentsError } = await supabase
       .from('appointments')
       .select()
@@ -46,7 +49,7 @@ export async function initializeDatabase() {
       console.error("Error accessing appointments table:", appointmentsError);
     }
     
-    // Create messages table
+    // Check messages table
     const { error: messagesError } = await supabase
       .from('messages')
       .select()
@@ -54,16 +57,6 @@ export async function initializeDatabase() {
       
     if (messagesError && !messagesError.code.includes('PGRST')) {
       console.error("Error accessing messages table:", messagesError);
-    }
-    
-    // Check medications table
-    const { error: medicationsError } = await supabase
-      .from('medications')
-      .select()
-      .limit(1);
-      
-    if (medicationsError && !medicationsError.code.includes('PGRST')) {
-      console.error("Error accessing medications table:", medicationsError);
     }
     
     console.log("Database initialization complete.");
