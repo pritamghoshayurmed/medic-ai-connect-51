@@ -31,14 +31,14 @@ export function asAppointmentStatus(status: string): 'pending' | 'confirmed' | '
  */
 export function toDoctorType(doctorData: any): Doctor {
   return {
-    id: doctorData.id,
-    name: doctorData.name || doctorData.full_name,
-    email: doctorData.email,
+    id: doctorData.id || '',
+    name: doctorData.name || doctorData.full_name || '',
+    email: doctorData.email || '',
     phone: doctorData.phone || '',
-    role: 'doctor',
+    role: 'doctor', // Explicitly set as 'doctor' to satisfy TypeScript
     specialty: doctorData.specialty || '',
     experience: doctorData.experience || doctorData.experience_years || 0,
-    education: doctorData.education || '',
+    education: doctorData.education || doctorData.qualification || '',
     hospital: doctorData.hospital || '',
     rating: doctorData.rating || 0,
     profilePic: doctorData.profilePic || '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
@@ -46,20 +46,41 @@ export function toDoctorType(doctorData: any): Doctor {
 }
 
 /**
+ * Helper to convert doctor profiles data to doctor array
+ */
+export function toDoctorArray(doctorProfilesData: any[]): Doctor[] {
+  if (!Array.isArray(doctorProfilesData)) return [];
+  
+  return doctorProfilesData.map(doctor => ({
+    id: doctor.id || '',
+    name: doctor.name || doctor.full_name || '',
+    email: doctor.email || '',
+    phone: doctor.phone || '',
+    role: 'doctor' as const, // Using const assertion to ensure type is correct
+    specialty: doctor.specialty || '',
+    experience: doctor.experience || doctor.experience_years || 0,
+    education: doctor.education || doctor.qualification || '',
+    hospital: doctor.hospital || '',
+    rating: doctor.rating || 0,
+    profilePic: doctor.profilePic || '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+  }));
+}
+
+/**
  * Helper to convert appointments with correct types
  */
 export function toAppointmentWithDoctor(appointmentData: any): Appointment & { doctor: Doctor } {
   const status = asAppointmentStatus(appointmentData.status);
-  const doctor = toDoctorType(appointmentData.doctor);
+  const doctor = toDoctorType(appointmentData.doctor || {});
   
   return {
     id: appointmentData.id,
-    patientId: appointmentData.patientId,
-    doctorId: appointmentData.doctorId,
-    date: appointmentData.date,
-    time: appointmentData.time,
+    patientId: appointmentData.patientId || appointmentData.patient_id,
+    doctorId: appointmentData.doctorId || appointmentData.doctor_id,
+    date: appointmentData.date || appointmentData.appointment_date,
+    time: appointmentData.time || appointmentData.appointment_time,
     status: status,
-    reason: appointmentData.reason || '',
+    reason: appointmentData.reason || appointmentData.symptoms || '',
     notes: appointmentData.notes || '',
     doctor
   };
@@ -73,18 +94,18 @@ export function toAppointmentWithPatient(appointmentData: any): Appointment & { 
   
   return {
     id: appointmentData.id,
-    patientId: appointmentData.patientId,
-    doctorId: appointmentData.doctorId,
-    date: appointmentData.date,
-    time: appointmentData.time,
+    patientId: appointmentData.patientId || appointmentData.patient_id,
+    doctorId: appointmentData.doctorId || appointmentData.doctor_id,
+    date: appointmentData.date || appointmentData.appointment_date,
+    time: appointmentData.time || appointmentData.appointment_time,
     status: status,
-    reason: appointmentData.reason || '',
+    reason: appointmentData.reason || appointmentData.symptoms || '',
     notes: appointmentData.notes || '',
     patient: {
-      id: appointmentData.patient.id,
-      name: appointmentData.patient.name || appointmentData.patient.full_name,
-      email: appointmentData.patient.email,
-      phone: appointmentData.patient.phone || '',
+      id: appointmentData.patient?.id || '',
+      name: appointmentData.patient?.name || appointmentData.patient?.full_name || '',
+      email: appointmentData.patient?.email || '',
+      phone: appointmentData.patient?.phone || '',
       role: 'patient'
     }
   };

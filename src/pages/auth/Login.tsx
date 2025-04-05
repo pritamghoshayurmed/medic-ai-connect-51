@@ -10,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
-  const { login, user } = useAuth();
+  const { login, user, isLoading: authLoading } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -21,13 +21,21 @@ export default function Login() {
   // Redirect if already logged in
   useEffect(() => {
     if (user) {
+      toast({
+        title: "Already logged in",
+        description: "Redirecting to your dashboard...",
+      });
+      
       const dashboardPath = user.role === "doctor" ? "/doctor" : "/patient";
       navigate(dashboardPath);
     }
-  }, [user, navigate]);
+  }, [user, navigate, toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (isLoading) return; // Prevent multiple submissions
+    
     setIsLoading(true);
 
     try {
@@ -46,9 +54,8 @@ export default function Login() {
         description: "Redirecting to your dashboard...",
       });
       
-      // Navigate based on role
-      const dashboardPath = role === "doctor" ? "/doctor" : "/patient";
-      navigate(dashboardPath);
+      // Navigate based on role - the auth context will handle this redirect
+      // after confirming the user's role from the database
     } catch (error: any) {
       console.error("Login error:", error);
       toast({
@@ -87,6 +94,7 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
+              disabled={isLoading || authLoading}
             />
           </div>
           <div>
@@ -99,11 +107,12 @@ export default function Login() {
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
+              disabled={isLoading || authLoading}
             />
           </div>
           <div className="pt-4">
-            <Button type="submit" className="w-full py-6" disabled={isLoading}>
-              {isLoading ? "Logging in..." : "Login"}
+            <Button type="submit" className="w-full py-6" disabled={isLoading || authLoading}>
+              {isLoading || authLoading ? "Logging in..." : "Login"}
             </Button>
           </div>
         </div>

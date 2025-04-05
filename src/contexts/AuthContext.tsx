@@ -1,16 +1,19 @@
+
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, UserRole } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@supabase/supabase-js";
 import { useNavigate } from "react-router-dom";
+import { asUserRole } from "@/utils/typeHelpers";
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
+  session: Session | null;
   login: (email: string, password: string, role: UserRole) => Promise<void>;
   signup: (name: string, email: string, password: string, role: UserRole, phone: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,22 +23,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [session, setSession] = useState<Session | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   // Check if user is already logged in and set up auth state listener
   useEffect(() => {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log("Auth state changed:", event, session);
-        setSession(session);
+      async (event, currentSession) => {
+        console.log("Auth state changed:", event, currentSession);
+        setSession(currentSession);
         
-        if (session?.user) {
+        if (currentSession?.user) {
           try {
             // Get profile data
             const { data: profile, error: profileError } = await supabase
               .from('profiles')
               .select('*')
-              .eq('id', session.user.id)
+              .eq('id', currentSession.user.id)
               .single();
 
             if (profileError) {
@@ -49,7 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               name: profile.full_name,
               email: profile.email,
               phone: profile.phone || '',
-              role: profile.role as UserRole,
+              role: asUserRole(profile.role),
             };
 
             // If role is doctor, get doctor profile data
@@ -58,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 .from('doctor_profiles')
                 .select('*')
                 .eq('id', profile.id)
-                .single();
+                .maybeSingle();
 
               if (!doctorError && doctorProfile) {
                 userData.profilePic = '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png';
@@ -67,32 +71,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             console.log("Setting user data:", userData);
             setUser(userData);
+            setIsLoading(false);
+            
+            // Redirect to the appropriate dashboard
+            if (event === 'SIGNED_IN') {
+              const dashboardPath = userData.role === 'doctor' ? '/doctor' : '/patient';
+              navigate(dashboardPath);
+            }
           } catch (error) {
             console.error("Error fetching user profile:", error);
             // Clear session on error
             await supabase.auth.signOut();
             setUser(null);
+            setIsLoading(false);
           }
         } else {
           setUser(null);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     );
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      console.log("Initial session check:", session);
-      setSession(session);
-      if (!session) {
+    supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
+      console.log("Initial session check:", initialSession);
+      setSession(initialSession);
+      if (!initialSession) {
         setIsLoading(false);
       }
+    }).catch(error => {
+      console.error("Error checking session:", error);
+      setIsLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
     };
-  }, []);
+  }, [navigate]);
 
   const login = async (email: string, password: string, role: UserRole) => {
     setIsLoading(true);
@@ -118,10 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .from('profiles')
             .select('*')
             .eq('id', data.user.id)
-            .single();
+            .maybeSingle();
 
-          if (profileError) {
-            console.log("Profile not found, creating new profile...");
+          if (profileError && profileError.code !== 'PGRST116') {
+            console.log("Profile not found or error:", profileError);
             // If profile doesn't exist, create it using the metadata
             const { error: insertError } = await supabase
               .from('profiles')
@@ -131,7 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 full_name: data.user.user_metadata?.full_name || email.split('@')[0],
                 role: role,
                 phone: data.user.user_metadata?.phone || ''
-              }, { onConflict: 'id' });
+              });
               
             if (insertError) {
               console.error("Error creating missing profile:", insertError);
@@ -139,38 +154,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             } else {
               console.log("Profile created successfully");
             }
-          } else if (profile.role !== role) {
+          } else if (profile && profile.role !== role) {
             // Role mismatch, sign out and throw error
             console.error(`Role mismatch: User is a ${profile.role} but trying to log in as ${role}`);
             await supabase.auth.signOut();
             throw new Error(`This account is registered as a ${profile.role}. Please select the correct user type.`);
           } else {
             console.log("Profile validation successful");
-            
-            // Create user object from profile
-            const userData: User = {
-              id: profile.id,
-              name: profile.full_name,
-              email: profile.email,
-              phone: profile.phone || '',
-              role: profile.role as UserRole,
-            };
-
-            // If role is doctor, get doctor profile data
-            if (profile.role === 'doctor') {
-              const { data: doctorProfile, error: doctorError } = await supabase
-                .from('doctor_profiles')
-                .select('*')
-                .eq('id', profile.id)
-                .single();
-
-              if (!doctorError && doctorProfile) {
-                userData.profilePic = '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png';
-              }
-            }
-
-            // Set the user explicitly after successful login
-            setUser(userData);
           }
         } catch (profileError) {
           console.error("Error checking user profile:", profileError);
@@ -187,9 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: error.message || "Please check your credentials and try again",
         variant: "destructive",
       });
-      throw error;
-    } finally {
       setIsLoading(false);
+      throw error;
     }
   };
 
@@ -221,12 +210,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             full_name: name,
             role: role,
             phone: phone
-          }, { onConflict: 'id' });
+          });
         
         if (profileError) {
           console.error("Error creating profile:", profileError);
           // Try to continue even if there's an error with profile creation
-          // The database trigger might handle this
         }
 
         // If doctor, create doctor profile
@@ -240,7 +228,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               consultation_fee: 0,
               available_days: [],
               available_hours: {}
-            }, { onConflict: 'id' });
+            });
           
           if (doctorError) {
             console.error("Error creating doctor profile:", doctorError);
@@ -267,12 +255,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      navigate('/login');
+    } catch (error) {
+      console.error("Error signing out:", error);
+      toast({
+        title: "Error signing out",
+        description: "There was an error signing out. Please try again.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, signup, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, session, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
