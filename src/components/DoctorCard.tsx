@@ -7,9 +7,10 @@ import { Star } from "lucide-react";
 interface DoctorCardProps {
   doctor: Doctor;
   onBookAppointment?: () => void;
+  onViewProfile?: () => void;
 }
 
-export default function DoctorCard({ doctor, onBookAppointment }: DoctorCardProps) {
+export default function DoctorCard({ doctor, onBookAppointment, onViewProfile }: DoctorCardProps) {
   const navigate = useNavigate();
 
   return (
@@ -43,9 +44,9 @@ export default function DoctorCard({ doctor, onBookAppointment }: DoctorCardProp
           variant="outline" 
           size="sm" 
           className="text-primary border-primary"
-          onClick={() => navigate(`/patient/chat/${doctor.id}`)}
+          onClick={() => onViewProfile ? onViewProfile() : navigate(`/patient/chat/${doctor.id}`)}
         >
-          Chat
+          {onViewProfile ? "View Profile" : "Chat"}
         </Button>
         <Button 
           size="sm" 

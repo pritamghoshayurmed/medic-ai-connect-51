@@ -57,7 +57,7 @@ async function createTables() {
     // Create profiles table
     console.log("Creating profiles table...");
     
-    // Use raw SQL queries since RPC might not exist yet
+    // Use raw SQL queries via RPC
     const { error: createProfilesError } = await supabase.rpc('execute_sql', {
       sql_query: `
         CREATE TABLE IF NOT EXISTS profiles (
@@ -76,6 +76,27 @@ async function createTables() {
       console.error("Error creating profiles table:", createProfilesError);
     }
     
+    // Create patient_medical_info table if it doesn't exist yet
+    console.log("Creating patient_medical_info table...");
+    const { error: createPatientMedicalInfoError } = await supabase.rpc('execute_sql', {
+      sql_query: `
+        CREATE TABLE IF NOT EXISTS patient_medical_info (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          patient_id UUID REFERENCES profiles(id) NOT NULL,
+          blood_type TEXT,
+          allergies TEXT[] DEFAULT '{}',
+          chronic_conditions TEXT[] DEFAULT '{}',
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          UNIQUE(patient_id)
+        );
+      `
+    });
+    
+    if (createPatientMedicalInfoError) {
+      console.error("Error creating patient_medical_info table:", createPatientMedicalInfoError);
+    }
+    
     console.log("Table initialization completed");
   } catch (error) {
     console.error("Error creating tables:", error);
@@ -87,7 +108,7 @@ async function createTables() {
  */
 export async function initializeUserTriggers() {
   try {
-    // Use raw SQL to create the user triggers
+    // Use RPC to create the user triggers
     const { error: initError } = await supabase.rpc('execute_sql', {
       sql_query: `
         CREATE OR REPLACE FUNCTION public.handle_new_user()

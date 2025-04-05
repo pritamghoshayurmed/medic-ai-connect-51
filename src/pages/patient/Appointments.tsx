@@ -1,236 +1,349 @@
 
 import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
-import { ChevronLeft, Calendar, Check, X, MoreHorizontal } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import BottomNavigation from "@/components/BottomNavigation";
-import AppointmentCard from "@/components/AppointmentCard";
-import { Appointment, Doctor } from "@/types";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
+import AppointmentCard from "@/components/AppointmentCard";
+import BottomNavigation from "@/components/BottomNavigation";
+import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { asAppointmentStatus, toAppointmentWithDoctor } from "@/utils/typeHelpers";
+import { Doctor, Appointment } from "@/types";
+import { supabase } from "@/integrations/supabase/client";
+import { 
+  Dialog,
+  DialogContent, 
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { format } from "date-fns";
+import { asAppointmentStatus } from "@/utils/typeHelpers";
 
-export default function PatientAppointments() {
-  const { user } = useAuth();
+export default function Appointments() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { toast } = useToast();
   
-  const [appointments, setAppointments] = useState<(Appointment & { doctor: Doctor })[]>([]);
   const [loading, setLoading] = useState(true);
-  
+  const [upcomingAppointments, setUpcomingAppointments] = useState<(Appointment & { doctor: Doctor })[]>([]);
+  const [pastAppointments, setPastAppointments] = useState<(Appointment & { doctor: Doctor })[]>([]);
+  const [confirmCancelDialog, setConfirmCancelDialog] = useState(false);
+  const [appointmentToCancel, setAppointmentToCancel] = useState<string | null>(null);
+  const [appointmentDetails, setAppointmentDetails] = useState<(Appointment & { doctor: Doctor }) | null>(null);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+
   useEffect(() => {
+    if (user) {
+      fetchAppointments();
+    }
+  }, [user]);
+
+  const fetchAppointments = async () => {
     if (!user) return;
+    setLoading(true);
     
-    const fetchAppointments = async () => {
-      setLoading(true);
-      try {
-        // Fetch appointments with the doctor information
-        const { data: appointmentsData, error: appointmentsError } = await supabase
-          .from("appointments")
-          .select(`
-            id, 
-            doctor_id, 
-            appointment_date, 
-            appointment_time, 
-            status, 
-            symptoms,
-            doctor:doctor_id(
-              id, 
-              full_name, 
-              email, 
-              phone, 
-              role,
-              doctor_profiles (
-                experience_years,
-                qualification,
-                rating
-              )
+    try {
+      const { data, error } = await supabase
+        .from('appointments')
+        .select(`
+          id,
+          patient_id,
+          doctor_id,
+          appointment_date,
+          appointment_time,
+          status,
+          symptoms,
+          created_at,
+          doctor:doctor_id (
+            id,
+            full_name,
+            email,
+            phone,
+            role,
+            doctor_profiles (
+              about,
+              experience_years,
+              qualification,
+              specialty_id,
+              consultation_fee,
+              rating
             )
-          `)
-          .eq("patient_id", user.id)
-          .order("appointment_date", { ascending: false });
-        
-        if (appointmentsError) {
-          console.error("Error fetching appointments:", appointmentsError);
-          throw appointmentsError;
-        }
-        
-        if (appointmentsData) {
-          // Convert to our application's appointment format
-          const formattedAppointments = appointmentsData.map(appointment => {
-            // Make sure doctor data is properly formatted
-            const doctorData = appointment.doctor || {};
-            
-            const doctor: Doctor = {
-              id: doctorData.id || '',
-              name: doctorData.full_name || '',
-              email: doctorData.email || '',
-              phone: doctorData.phone || '',
-              role: 'doctor',
-              specialty: '',
-              experience: doctorData.doctor_profiles?.experience_years || 0,
-              education: doctorData.doctor_profiles?.qualification || '',
-              rating: doctorData.doctor_profiles?.rating || 0,
-              profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
-            };
-            
-            return {
-              id: appointment.id,
-              patientId: user.id,
-              doctorId: appointment.doctor_id || '',
-              date: appointment.appointment_date,
-              time: appointment.appointment_time,
-              status: asAppointmentStatus(appointment.status),
-              reason: appointment.symptoms || '',
-              notes: '',
-              doctor
-            };
-          });
-          
-          setAppointments(formattedAppointments);
-        }
-      } catch (error) {
-        console.error("Error in fetchAppointments:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load appointments.",
-          variant: "destructive",
+          )
+        `)
+        .eq('patient_id', user.id);
+
+      if (error) throw error;
+
+      if (data) {
+        const appointments = data.map(item => {
+          // Default doctor data if not available
+          let doctorData: Doctor = {
+            id: item.doctor?.id || '',
+            name: item.doctor?.full_name || 'Unknown Doctor',
+            email: item.doctor?.email || '',
+            phone: item.doctor?.phone || '',
+            role: 'doctor',
+            specialty: 'General Practitioner',
+            experience: item.doctor?.doctor_profiles?.experience_years || 0,
+            education: item.doctor?.doctor_profiles?.qualification || '',
+            hospital: '',
+            rating: item.doctor?.doctor_profiles?.rating || 0,
+            profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+          };
+
+          return {
+            id: item.id,
+            patientId: item.patient_id,
+            doctorId: item.doctor_id,
+            date: item.appointment_date,
+            time: item.appointment_time,
+            status: asAppointmentStatus(item.status),
+            reason: item.symptoms || '',
+            notes: '',
+            doctor: doctorData
+          };
         });
-      } finally {
-        setLoading(false);
+
+        // Sort all appointments by date (most recent first)
+        appointments.sort((a, b) => {
+          const dateA = new Date(`${a.date} ${a.time}`);
+          const dateB = new Date(`${b.date} ${b.time}`);
+          return dateB.getTime() - dateA.getTime();
+        });
+
+        // Separate into upcoming and past appointments
+        const now = new Date();
+        const upcoming: (Appointment & { doctor: Doctor })[] = [];
+        const past: (Appointment & { doctor: Doctor })[] = [];
+
+        appointments.forEach(appt => {
+          const apptDate = new Date(`${appt.date} ${appt.time}`);
+          if (apptDate > now && appt.status !== 'cancelled') {
+            upcoming.push(appt);
+          } else {
+            past.push(appt);
+          }
+        });
+
+        setUpcomingAppointments(upcoming);
+        setPastAppointments(past);
       }
-    };
+    } catch (error) {
+      console.error("Error fetching appointments:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load appointments",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCancelAppointment = (appointmentId: string) => {
+    setAppointmentToCancel(appointmentId);
+    setConfirmCancelDialog(true);
+  };
+
+  const confirmCancelAppointment = async () => {
+    if (!appointmentToCancel) return;
     
-    fetchAppointments();
-  }, [user, toast]);
-  
-  const cancelAppointment = async (appointmentId: string) => {
     try {
       const { error } = await supabase
-        .from("appointments")
-        .update({ status: "cancelled" })
-        .eq("id", appointmentId)
-        .eq("patient_id", user?.id);
+        .from('appointments')
+        .update({ status: 'cancelled' })
+        .eq('id', appointmentToCancel);
       
       if (error) throw error;
       
-      // Update state
-      setAppointments(prevAppointments => 
-        prevAppointments.map(appointment => 
-          appointment.id === appointmentId
-            ? { ...appointment, status: "cancelled" }
-            : appointment
+      toast({
+        title: "Appointment Cancelled",
+        description: "Your appointment has been cancelled successfully"
+      });
+      
+      // Update local state
+      setUpcomingAppointments(prev => 
+        prev.map(appt => 
+          appt.id === appointmentToCancel
+            ? { ...appt, status: 'cancelled' }
+            : appt
         )
       );
       
-      toast({
-        title: "Appointment Cancelled",
-        description: "Your appointment has been cancelled successfully.",
-      });
+      // Move to past appointments if it's cancelled
+      const cancelledAppointment = upcomingAppointments.find(appt => appt.id === appointmentToCancel);
+      if (cancelledAppointment) {
+        setPastAppointments(prev => [...prev, { ...cancelledAppointment, status: 'cancelled' }]);
+        setUpcomingAppointments(prev => prev.filter(appt => appt.id !== appointmentToCancel));
+      }
+      
     } catch (error) {
       console.error("Error cancelling appointment:", error);
       toast({
         title: "Error",
-        description: "Failed to cancel appointment.",
-        variant: "destructive",
+        description: "Failed to cancel appointment",
+        variant: "destructive"
       });
+    } finally {
+      setConfirmCancelDialog(false);
+      setAppointmentToCancel(null);
     }
   };
 
-  // Filter appointments based on status
-  const upcomingAppointments = appointments.filter(
-    app => app.status === "pending" || app.status === "confirmed"
-  );
-  
-  const pastAppointments = appointments.filter(
-    app => app.status === "completed" || app.status === "cancelled"
-  );
+  const viewAppointmentDetails = (appointment: Appointment & { doctor: Doctor }) => {
+    setAppointmentDetails(appointment);
+    setShowDetailsDialog(true);
+  };
 
   return (
-    <div className="pb-24">
+    <div className="pb-16">
       {/* Header */}
-      <div className="bg-primary text-white p-4 flex items-center">
-        <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
-          <ChevronLeft />
+      <div className="bg-primary text-white p-4 flex items-center justify-between">
+        <div className="flex items-center">
+          <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
+            <ChevronLeft />
+          </Button>
+          <h1 className="text-xl font-bold">My Appointments</h1>
+        </div>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="text-white"
+          onClick={() => navigate('/patient/find-doctor')}
+        >
+          Book New
         </Button>
-        <h1 className="text-xl font-bold">Appointments</h1>
       </div>
 
-      {/* Appointment Tabs */}
-      <Tabs defaultValue="upcoming" className="w-full p-4">
-        <TabsList className="grid grid-cols-2 w-full mb-4">
+      {/* Appointments tabs */}
+      <Tabs defaultValue="upcoming" className="p-4">
+        <TabsList className="grid w-full grid-cols-2 mb-4">
           <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
           <TabsTrigger value="past">Past</TabsTrigger>
         </TabsList>
         
-        {/* Upcoming Appointments */}
         <TabsContent value="upcoming">
           {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : upcomingAppointments.length > 0 ? (
-            <div className="space-y-4">
-              {upcomingAppointments.map((appointment) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                  doctorName={appointment.doctor.name}
-                  doctorSpecialty={appointment.doctor.specialty || "Doctor"}
-                  doctorImage={appointment.doctor.profilePic}
-                  onCancel={() => cancelAppointment(appointment.id)}
-                  showCancelButton={appointment.status !== "cancelled"}
-                  onViewDetails={() => navigate(`/patient/appointment/${appointment.id}`)}
-                />
-              ))}
-            </div>
+            upcomingAppointments.map(appointment => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                person={appointment.doctor}
+                doctorName={appointment.doctor.name}
+                doctorSpecialty={appointment.doctor.specialty}
+                doctorImage={appointment.doctor.profilePic}
+                onCancel={async () => handleCancelAppointment(appointment.id)}
+                showCancelButton={true}
+                onViewDetails={() => viewAppointmentDetails(appointment)}
+              />
+            ))
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 bg-gray-50 rounded-lg">
-              <Calendar className="h-12 w-12 text-gray-400 mb-2" />
-              <h3 className="text-xl font-semibold text-gray-700">No Upcoming Appointments</h3>
-              <p className="text-gray-500 mb-4 text-center px-4">
-                You don't have any upcoming appointments scheduled.
-              </p>
-              <Button onClick={() => navigate("/patient/find-doctor")}>
+            <div className="text-center py-8">
+              <CalendarClock className="w-16 h-16 mx-auto text-gray-300" />
+              <p className="mt-4 text-gray-500">You don't have any upcoming appointments</p>
+              <Button 
+                variant="outline" 
+                className="mt-4"
+                onClick={() => navigate('/patient/find-doctor')}
+              >
                 Book an Appointment
               </Button>
             </div>
           )}
         </TabsContent>
         
-        {/* Past Appointments */}
         <TabsContent value="past">
           {loading ? (
-            <div className="flex items-center justify-center py-10">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
           ) : pastAppointments.length > 0 ? (
-            <div className="space-y-4">
-              {pastAppointments.map((appointment) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                  doctorName={appointment.doctor.name}
-                  doctorSpecialty={appointment.doctor.specialty || "Doctor"}
-                  doctorImage={appointment.doctor.profilePic}
-                  onViewDetails={() => navigate(`/patient/appointment/${appointment.id}`)}
-                  showCancelButton={false}
-                />
-              ))}
-            </div>
+            pastAppointments.map(appointment => (
+              <AppointmentCard
+                key={appointment.id}
+                appointment={appointment}
+                person={appointment.doctor}
+                doctorName={appointment.doctor.name}
+                doctorSpecialty={appointment.doctor.specialty}
+                doctorImage={appointment.doctor.profilePic}
+                onViewDetails={() => viewAppointmentDetails(appointment)}
+                showCancelButton={false}
+              />
+            ))
           ) : (
-            <div className="flex flex-col items-center justify-center py-10 bg-gray-50 rounded-lg">
-              <Calendar className="h-12 w-12 text-gray-400 mb-2" />
-              <h3 className="text-xl font-semibold text-gray-700">No Past Appointments</h3>
-              <p className="text-gray-500 text-center px-4">
-                You don't have any past appointments.
-              </p>
+            <div className="text-center py-8">
+              <CalendarClock className="w-16 h-16 mx-auto text-gray-300" />
+              <p className="mt-4 text-gray-500">You don't have any past appointments</p>
             </div>
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Confirm cancellation dialog */}
+      <Dialog open={confirmCancelDialog} onOpenChange={setConfirmCancelDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Appointment</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this appointment? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCancelDialog(false)}>No, Keep It</Button>
+            <Button variant="destructive" onClick={confirmCancelAppointment}>Yes, Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Appointment details dialog */}
+      {appointmentDetails && (
+        <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Appointment Details</DialogTitle>
+            </DialogHeader>
+            
+            <div className="space-y-4">
+              <div>
+                <h3 className="font-semibold text-sm text-gray-500">Doctor</h3>
+                <p>{appointmentDetails.doctor.name}</p>
+              </div>
+              
+              <div>
+                <h3 className="font-semibold text-sm text-gray-500">Specialty</h3>
+                <p>{appointmentDetails.doctor.specialty}</p>
+              </div>
+              
+              <div>
+                <h3 className="font-semibold text-sm text-gray-500">Date & Time</h3>
+                <p>
+                  {format(new Date(appointmentDetails.date), "MMMM d, yyyy")} at {appointmentDetails.time}
+                </p>
+              </div>
+              
+              <div>
+                <h3 className="font-semibold text-sm text-gray-500">Status</h3>
+                <p className="capitalize">{appointmentDetails.status}</p>
+              </div>
+              
+              <div>
+                <h3 className="font-semibold text-sm text-gray-500">Reason for Visit</h3>
+                <p>{appointmentDetails.reason || "Not specified"}</p>
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button onClick={() => setShowDetailsDialog(false)}>Close</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <BottomNavigation />
     </div>

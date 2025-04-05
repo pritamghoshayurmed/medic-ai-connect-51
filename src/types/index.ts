@@ -1,4 +1,3 @@
-
 export type UserRole = 'patient' | 'doctor';
 
 export interface User {
@@ -28,10 +27,20 @@ export interface PatientProfile {
   role: 'patient';
   profilePic?: string;
   medical_info?: {
-    blood_type: string;
+    blood_type: string | null;
     allergies: string[];
     chronic_conditions: string[];
   };
+}
+
+export interface PatientMedicalInfo {
+  id: string;
+  patient_id: string;
+  blood_type: string | null;
+  allergies: string[];
+  chronic_conditions: string[];
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Doctor extends User {

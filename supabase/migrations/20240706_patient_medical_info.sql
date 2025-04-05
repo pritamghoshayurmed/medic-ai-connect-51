@@ -3,8 +3,8 @@ CREATE TABLE IF NOT EXISTS patient_medical_info (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   patient_id UUID REFERENCES profiles(id) NOT NULL,
   blood_type TEXT,
-  allergies TEXT[],
-  chronic_conditions TEXT[],
+  allergies TEXT[] DEFAULT '{}',
+  chronic_conditions TEXT[] DEFAULT '{}',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   UNIQUE(patient_id)

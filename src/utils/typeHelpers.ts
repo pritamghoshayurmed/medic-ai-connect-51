@@ -1,5 +1,5 @@
 
-import { Doctor, Patient, Appointment, UserRole, DoctorProfile } from "@/types";
+import { Doctor, Patient, Appointment, UserRole, DoctorProfile, PatientProfile } from "@/types";
 
 /**
  * Helper function to convert a string to a valid UserRole type
@@ -42,6 +42,21 @@ export function toDoctorType(doctorData: any): Doctor {
     hospital: doctorData.hospital || '',
     rating: doctorData.rating || 0,
     profilePic: doctorData.profilePic || '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+  };
+}
+
+/**
+ * Helper to convert patient data from Supabase to PatientProfile type
+ */
+export function toPatientProfile(patientData: any): PatientProfile {
+  return {
+    id: patientData.id || '',
+    name: patientData.name || patientData.full_name || '',
+    email: patientData.email || '',
+    phone: patientData.phone || '',
+    role: 'patient' as const,
+    profilePic: patientData.profilePic,
+    medical_info: patientData.medical_info
   };
 }
 

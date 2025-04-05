@@ -26,19 +26,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
-interface PatientProfile {
-  id: string;
-  name: string;
-  email: string;
-  phone: string;
-  role: string;
-  medical_info?: {
-    blood_type: string;
-    allergies: string[];
-    chronic_conditions: string[];
-  };
-}
+import { PatientProfile } from "@/types";
 
 export default function PatientProfile() {
   const navigate = useNavigate();
@@ -108,10 +96,10 @@ export default function PatientProfile() {
           name: profileData.full_name,
           email: profileData.email,
           phone: profileData.phone || '',
-          role: profileData.role
+          role: 'patient'
         };
         
-        // Try to fetch medical info using direct table access
+        // Try to fetch medical info from the patient_medical_info table
         try {
           const { data: medicalData, error: medicalError } = await supabase
             .from('patient_medical_info')
@@ -223,60 +211,81 @@ export default function PatientProfile() {
         .map(item => item.trim())
         .filter(item => item !== '');
       
-      // First, check if patient_medical_info table exists and has an entry for this user
+      // First, check if patient_medical_info exists for this user
       const { count, error: checkError } = await supabase
         .from('patient_medical_info')
         .select('*', { count: 'exact', head: true })
         .eq('patient_id', user.id);
         
       if (checkError) {
-        // Table might not exist, create it
-        const { error: createTableError } = await supabase.rpc('execute_sql', {
-          sql_query: `
-            CREATE TABLE IF NOT EXISTS patient_medical_info (
-              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-              patient_id UUID REFERENCES profiles(id) NOT NULL,
-              blood_type TEXT,
-              allergies TEXT[],
-              chronic_conditions TEXT[],
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-              updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-              UNIQUE(patient_id)
-            );
-          `
-        });
+        console.error("Error checking medical info:", checkError);
         
-        if (createTableError) {
-          console.error("Error creating medical info table:", createTableError);
-          throw createTableError;
+        // Try to create the table using RPC if needed
+        if (checkError.message.includes("does not exist")) {
+          const { error: createError } = await supabase.rpc('execute_sql', {
+            sql_query: `
+              CREATE TABLE IF NOT EXISTS patient_medical_info (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                patient_id UUID REFERENCES profiles(id) NOT NULL,
+                blood_type TEXT,
+                allergies TEXT[],
+                chronic_conditions TEXT[],
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+                UNIQUE(patient_id)
+              );
+            `
+          });
+          
+          if (createError) {
+            console.error("Failed to create table:", createError);
+            throw createError;
+          }
+        } else {
+          throw checkError;
         }
       }
       
-      // Now try inserting/updating the data
+      // Now try to insert or update the data
       if (!count) {
-        // Insert new record
-        const { error: insertError } = await supabase
-          .from('patient_medical_info')
-          .insert({
-            patient_id: user.id,
-            blood_type: medicalInfo.blood_type,
-            allergies: allergiesArray,
-            chronic_conditions: conditionsArray
-          });
+        // Insert new record directly using SQL
+        const { error: insertError } = await supabase.rpc('execute_sql', {
+          sql_query: `
+            INSERT INTO patient_medical_info (
+              patient_id, 
+              blood_type, 
+              allergies, 
+              chronic_conditions
+            ) VALUES (
+              '${user.id}',
+              ${medicalInfo.blood_type ? `'${medicalInfo.blood_type}'` : 'NULL'},
+              ARRAY[${allergiesArray.map(a => `'${a}'`).join(',')}],
+              ARRAY[${conditionsArray.map(c => `'${c}'`).join(',')}]
+            );
+          `
+        });
           
-        if (insertError) throw insertError;
+        if (insertError) {
+          console.error("Insert error:", insertError);
+          throw insertError;
+        }
       } else {
-        // Update existing record
-        const { error: updateError } = await supabase
-          .from('patient_medical_info')
-          .update({
-            blood_type: medicalInfo.blood_type,
-            allergies: allergiesArray,
-            chronic_conditions: conditionsArray
-          })
-          .eq('patient_id', user.id);
+        // Update existing record using SQL
+        const { error: updateError } = await supabase.rpc('execute_sql', {
+          sql_query: `
+            UPDATE patient_medical_info
+            SET 
+              blood_type = ${medicalInfo.blood_type ? `'${medicalInfo.blood_type}'` : 'NULL'},
+              allergies = ARRAY[${allergiesArray.map(a => `'${a}'`).join(',')}],
+              chronic_conditions = ARRAY[${conditionsArray.map(c => `'${c}'`).join(',')}]
+            WHERE patient_id = '${user.id}';
+          `
+        });
           
-        if (updateError) throw updateError;
+        if (updateError) {
+          console.error("Update error:", updateError);
+          throw updateError;
+        }
       }
       
       // Update local state
