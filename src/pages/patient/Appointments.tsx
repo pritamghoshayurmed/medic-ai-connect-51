@@ -46,16 +46,18 @@ export default function Appointments() {
             appointment_time,
             status,
             symptoms,
-            profiles:doctor_id (
+            doctor:doctor_id (
               id,
               full_name,
               email,
               phone,
               role
             ),
-            doctor_profiles:doctor_id (
-              specialty,
-              experience_years
+            doctor_specialty:doctor_id (
+              doctor_profiles (
+                specialty,
+                experience_years
+              )
             )
           `)
           .eq('patient_id', user.id)
@@ -68,15 +70,17 @@ export default function Appointments() {
         
         if (data) {
           const formattedAppointments = data.map(appt => {
-            const doctorProfile = appt.profiles || {};
-            const doctorSpecialtyData = appt.doctor_profiles?.[0] || {};
+            // Safely access nested properties with fallbacks
+            const doctorProfile = appt.doctor || {};
+            const doctorSpecialtyData = 
+              appt.doctor_specialty?.doctor_profiles?.[0] || {};
             
             const doctor: Doctor = {
               id: doctorProfile.id || appt.doctor_id,
               name: doctorProfile.full_name || 'Unknown Doctor',
               email: doctorProfile.email || '',
               phone: doctorProfile.phone || '',
-              role: 'doctor',
+              role: 'doctor' as const,
               specialty: doctorSpecialtyData.specialty || 'General Practitioner',
               experience: doctorSpecialtyData.experience_years || 0,
               profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png',

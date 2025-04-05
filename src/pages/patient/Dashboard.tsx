@@ -15,7 +15,7 @@ export default function PatientDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
-  const [recommendedDoctors, setRecommendedDoctors] = useState<Doctor[]>([]);
+  const [recommendedDoctors, setRecommendDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -87,7 +87,7 @@ export default function PatientDashboard() {
             profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png' // Default image
           }));
           
-          setRecommendedDoctors(formattedDoctors);
+          setRecommendDoctors(formattedDoctors);
         }
 
       } catch (error) {
@@ -121,7 +121,7 @@ export default function PatientDashboard() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-xl font-bold">Hello, {user?.name?.split(' ')[0] || 'Patient'}!</h1>
-            <p className="text-sm opacity-90">{formattedDate}</p>
+            <p className="text-sm opacity-90">{format(new Date(), "EEEE, MMMM d")}</p>
           </div>
           <div className="flex space-x-2">
             <Button variant="ghost" size="icon" className="text-white" onClick={() => navigate("/patient/profile")}>
@@ -194,7 +194,7 @@ export default function PatientDashboard() {
           <DoctorCard
             key={doctor.id}
             doctor={doctor}
-            onBookAppointment={() => handleBookAppointment(doctor.id)}
+            onBookAppointment={() => navigate(`/patient/find-doctor?selected=${doctor.id}`)}
           />
         ))}
       </div>
