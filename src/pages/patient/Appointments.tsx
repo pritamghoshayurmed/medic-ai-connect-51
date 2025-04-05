@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -70,19 +69,20 @@ export default function Appointments() {
         
         if (data) {
           const formattedAppointments = data.map(appt => {
-            // Safely access nested properties with fallbacks
+            const doctorId = appt.doctor_id || '';
+            
             const doctorProfile = appt.doctor || {};
             const doctorSpecialtyData = 
               appt.doctor_specialty?.doctor_profiles?.[0] || {};
             
             const doctor: Doctor = {
-              id: doctorProfile.id || appt.doctor_id,
-              name: doctorProfile.full_name || 'Unknown Doctor',
-              email: doctorProfile.email || '',
-              phone: doctorProfile.phone || '',
+              id: typeof doctorProfile.id === 'string' ? doctorProfile.id : doctorId,
+              name: typeof doctorProfile.full_name === 'string' ? doctorProfile.full_name : 'Unknown Doctor',
+              email: typeof doctorProfile.email === 'string' ? doctorProfile.email : '',
+              phone: typeof doctorProfile.phone === 'string' ? doctorProfile.phone : '',
               role: 'doctor' as const,
-              specialty: doctorSpecialtyData.specialty || 'General Practitioner',
-              experience: doctorSpecialtyData.experience_years || 0,
+              specialty: typeof doctorSpecialtyData.specialty === 'string' ? doctorSpecialtyData.specialty : 'General Practitioner',
+              experience: typeof doctorSpecialtyData.experience_years === 'number' ? doctorSpecialtyData.experience_years : 0,
               profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png',
             };
             
