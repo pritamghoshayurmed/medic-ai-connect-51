@@ -29,11 +29,6 @@ import DoctorChatRooms from "./pages/doctor/ChatRooms";
 
 const queryClient = new QueryClient();
 
-// Initialize the database on app startup
-useEffect(() => {
-  initializeDatabase().catch(console.error);
-}, []);
-
 // Protected route component
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) => {
   const { user, isLoading } = useAuth();
@@ -49,137 +44,150 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode;
   return <>{children}</>;
 };
 
+function AppWithAuth() {
+  // Initialize the database on app startup
+  useEffect(() => {
+    initializeDatabase().catch(console.error);
+  }, []);
+  
+  return (
+    <>
+      <Toaster />
+      <Sonner />
+      <Routes>
+        {/* Public routes */}
+        <Route path="/" element={<Index />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
+        {/* Patient routes */}
+        <Route
+          path="/patient"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/find-doctor"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <FindDoctor />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/appointments"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <Appointments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/chat/:id"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <Chat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/ai-assistant"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <AiAssistant />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/medications"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <MedicationReminders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/profile"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientProfile />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Doctor routes */}
+        <Route
+          path="/doctor"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DoctorDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/appointments"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DoctorAppointments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/analytics"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DoctorAnalytics />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/diagnosis"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DiagnosisEngine />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/chat-rooms"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DoctorChatRooms />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/chat/:id"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <Chat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/doctor/profile"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DoctorProfile />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch-all route */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </>
+  );
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<Index />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/signup" element={<Signup />} />
-
-          {/* Patient routes */}
-          <Route
-            path="/patient"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <PatientDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/patient/find-doctor"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <FindDoctor />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/patient/appointments"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <Appointments />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/patient/chat/:id"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <Chat />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/patient/ai-assistant"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <AiAssistant />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/patient/medications"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <MedicationReminders />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/patient/profile"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <PatientProfile />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Doctor routes */}
-          <Route
-            path="/doctor"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/doctor/appointments"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorAppointments />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/doctor/analytics"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorAnalytics />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/doctor/diagnosis"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DiagnosisEngine />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/doctor/chat-rooms"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorChatRooms />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/doctor/chat/:id"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <Chat />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/doctor/profile"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorProfile />
-              </ProtectedRoute>
-            }
-          />
-
-          {/* Catch-all route */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AppWithAuth />
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

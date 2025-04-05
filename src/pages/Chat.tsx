@@ -1,424 +1,244 @@
-import { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ChevronLeft, Send, CheckCheck, Info } from "lucide-react";
+
+import React, { useState, useEffect, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent } from "@/components/ui/card";
 import { Message } from "@/types";
-import { 
-  connectSocket, 
-  disconnectSocket, 
-  getChatRoomId, 
-  joinChatRoom,
-  leaveChatRoom,
-  sendMessage as socketSendMessage,
-  useSocket
-} from "@/services/socketService";
+import { format } from "date-fns";
+import { ArrowLeft, Send } from "lucide-react";
 
 export default function Chat() {
-  const { userId } = useParams<{ userId: string }>();
+  const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
-  
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const [receiver, setReceiver] = useState<{id: string, name: string, profilePic?: string} | null>(null);
   const [loading, setLoading] = useState(true);
-  const [socketConnected, setSocketConnected] = useState(false);
-  
+  const [otherUser, setOtherUser] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const chatRoomId = userId && user?.id ? getChatRoomId(user.id, userId) : null;
-  
-  // Connect to socket
-  const { isConnected } = useSocket(user?.id || null);
-  
-  useEffect(() => {
-    setSocketConnected(isConnected);
-  }, [isConnected]);
 
   useEffect(() => {
-    if (!user || !userId || !chatRoomId) return;
-
-    // Join the chat room
-    joinChatRoom(chatRoomId);
-
-    const socket = connectSocket(user.id);
-    
-    // Listen for new messages
-    socket.on('receiveMessage', (message: any) => {
-      console.log('Received message via socket:', message);
-      if ((message.senderId === userId && message.receiverId === user.id) || 
-          (message.senderId === user.id && message.receiverId === userId)) {
-        
-        // Create a new message object
-        const newMsg: Message = {
-          id: message.id || crypto.randomUUID(),
-          sender_id: message.senderId,
-          receiver_id: message.receiverId,
-          content: message.content,
-          timestamp: message.timestamp || new Date().toISOString(),
-          read: message.senderId === user.id ? true : false
-        };
-        
-        // Update messages
-        setMessages(prev => {
-          // Check if message already exists to avoid duplicates
-          if (prev.some(m => m.id === newMsg.id)) {
-            return prev;
-          }
-          return [...prev, newMsg];
-        });
-        
-        // Mark message as read if current user is the receiver
-        if (message.senderId === userId && !message.read) {
-          markMessageAsRead(message.id);
-        }
-      }
-    });
-
-    // Cleanup function
-    return () => {
-      if (chatRoomId) {
-        leaveChatRoom(chatRoomId);
-      }
-      socket.off('receiveMessage');
-    };
-  }, [user, userId, chatRoomId]);
-
-  useEffect(() => {
-    if (!user || !userId) return;
-
-    const fetchReceiverDetails = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, full_name, role')
-          .eq('id', userId)
-          .single();
-
-        if (error) throw error;
-        
-        // Fetch profile picture if exists (for doctors)
-        let profilePic = undefined;
-        
-        if (data.role === 'doctor') {
-          const { data: doctorData, error: doctorError } = await supabase
-            .from('doctor_profiles')
-            .select('profile_photo')
-            .eq('id', userId)
-            .single();
-            
-          if (!doctorError && doctorData && doctorData.profile_photo) {
-            profilePic = doctorData.profile_photo;
-          }
-        }
-        
-        setReceiver({
-          id: data.id,
-          name: data.full_name,
-          profilePic
-        });
-      } catch (error) {
-        console.error("Error fetching receiver details:", error);
-        toast({
-          title: "Error",
-          description: "Could not load chat details",
-          variant: "destructive",
-        });
-      }
-    };
+    if (!user) return;
 
     const fetchMessages = async () => {
-      setLoading(true);
       try {
-        // Direct query to get messages between users
+        setLoading(true);
+        
+        // Find which user we're chatting with
+        const otherUserId = id;
+        
+        if (!otherUserId) {
+          console.error("No chat partner ID found");
+          return;
+        }
+        
+        // Get other user details
+        const { data: userData, error: userError } = await supabase
+          .from('profiles')
+          .select(`
+            *,
+            doctor_profiles (*)
+          `)
+          .eq('id', otherUserId)
+          .single();
+          
+        if (userError) {
+          console.error("Error fetching user:", userError);
+        } else if (userData) {
+          setOtherUser({
+            ...userData,
+            profilePic: userData.doctor_profiles ? 
+              '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png' :
+              undefined
+          });
+        }
+        
+        // Get messages between the two users
         const { data, error } = await supabase
           .from('messages')
           .select('*')
-          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${userId}),and(sender_id.eq.${userId},receiver_id.eq.${user.id})`)
+          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
+          .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
           .order('timestamp', { ascending: true });
-            
-        if (error) throw error;
           
-        // Format messages to match our app's type
-        const formattedMessages: Message[] = data.map((msg: any) => ({
-          id: msg.id,
-          sender_id: msg.sender_id,
-          receiver_id: msg.receiver_id,
-          content: msg.content,
-          timestamp: msg.timestamp || new Date().toISOString(),
-          read: msg.read || false
-        }));
-
-        setMessages(formattedMessages);
-        
-        // Mark unread messages as read
-        const unreadMessages = formattedMessages.filter(
-          msg => msg.receiver_id === user.id && !msg.read
-        );
-        
-        if (unreadMessages.length > 0) {
-          await Promise.all(
-            unreadMessages.map(msg => markMessageAsRead(msg.id))
+        if (error) {
+          console.error("Error fetching messages:", error);
+        } else if (data) {
+          // Filter to only include messages between these two users
+          const filteredMessages = data.filter(
+            msg => 
+              (msg.sender_id === user.id && msg.receiver_id === otherUserId) || 
+              (msg.sender_id === otherUserId && msg.receiver_id === user.id)
           );
+          
+          // Convert to our Message type
+          const typedMessages: Message[] = filteredMessages.map(msg => ({
+            id: msg.id,
+            sender_id: msg.sender_id,
+            receiver_id: msg.receiver_id,
+            content: msg.content,
+            timestamp: msg.timestamp,
+            read: msg.read
+          }));
+          
+          setMessages(typedMessages);
+          
+          // Mark unread messages as read
+          const unreadIds = filteredMessages
+            .filter(msg => msg.receiver_id === user.id && !msg.read)
+            .map(msg => msg.id);
+            
+          if (unreadIds.length > 0) {
+            await supabase
+              .from('messages')
+              .update({ read: true })
+              .in('id', unreadIds);
+          }
         }
-      } catch (error) {
-        console.error("Error fetching messages:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load messages",
-          variant: "destructive",
-        });
+      } catch (err) {
+        console.error("Error in chat:", err);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchReceiverDetails();
     fetchMessages();
-
-    // Subscribe to new messages through Supabase Realtime as fallback
-    const channel = supabase
-      .channel('chat_updates')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages',
-          filter: `sender_id=eq.${userId},receiver_id=eq.${user.id}`
-        },
-        (payload) => {
-          console.log('Received message via Supabase:', payload);
-          // Only process if socket is not connected (fallback)
-          if (!socketConnected) {
-            const newMsg = payload.new as any;
-            setMessages((prev) => {
-              // Check for duplicates
-              if (prev.some(m => m.id === newMsg.id)) {
-                return prev;
-              }
-              return [
-                ...prev,
-                {
-                  id: newMsg.id,
-                  sender_id: newMsg.sender_id,
-                  receiver_id: newMsg.receiver_id,
-                  content: newMsg.content,
-                  timestamp: newMsg.timestamp || new Date().toISOString(),
-                  read: newMsg.read || false
-                },
-              ];
-            });
-            
-            // Mark as read
-            markMessageAsRead(newMsg.id);
-          }
-        }
-      )
+    
+    // Set up real-time subscription for new messages
+    const subscription = supabase
+      .channel('public:messages')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `sender_id=eq.${id},receiver_id=eq.${user.id}`
+      }, (payload) => {
+        const newMsg = payload.new as Message;
+        setMessages(prev => [...prev, newMsg]);
+        
+        // Mark as read immediately
+        supabase
+          .from('messages')
+          .update({ read: true })
+          .eq('id', newMsg.id);
+      })
       .subscribe();
-
+      
     return () => {
-      supabase.removeChannel(channel);
+      subscription.unsubscribe();
     };
-  }, [user, userId, toast, socketConnected]);
+  }, [user, id]);
 
+  // Scroll to bottom whenever messages change
   useEffect(() => {
-    // Scroll to bottom on new messages
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const markMessageAsRead = async (messageId: string) => {
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !user || !id) return;
+    
     try {
-      await supabase
-        .from('messages')
-        .update({ read: true })
-        .eq('id', messageId);
-    } catch (error) {
-      console.error("Error marking message as read:", error);
-    }
-  };
-
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() || !user || !userId || !chatRoomId) return;
-
-    try {
-      const messageData = {
+      const message = {
         sender_id: user.id,
-        receiver_id: userId,
+        receiver_id: id,
         content: newMessage,
-        read: false,
-        timestamp: new Date().toISOString()
+        read: false
       };
-
-      // Generate a temporary ID for optimistic updates
-      const tempId = crypto.randomUUID();
       
-      // Add message to UI immediately (optimistic update)
-      setMessages(prev => [
-        ...prev,
-        {
-          id: tempId,
-          ...messageData
-        }
-      ]);
-      
-      setNewMessage("");
-
-      // Try to send via Socket.IO first
-      if (socketConnected) {
-        socketSendMessage({
-          roomId: chatRoomId,
-          senderId: user.id,
-          receiverId: userId,
-          content: newMessage
-        });
-      }
-
-      // Always store in database for persistence
-      const { data, error } = await supabase
+      const { error } = await supabase
         .from('messages')
-        .insert(messageData)
-        .select();
-
-      if (error) throw error;
-      
-      // Replace the temp message with the real one from the database
-      if (data && data.length > 0) {
-        setMessages(prev => 
-          prev.map(msg => 
-            msg.id === tempId ? { ...data[0], id: data[0].id } : msg
-          )
-        );
+        .insert(message);
+        
+      if (error) {
+        console.error("Error sending message:", error);
+        return;
       }
       
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send message",
-        variant: "destructive",
-      });
+      // Clear the input
+      setNewMessage("");
+    } catch (err) {
+      console.error("Error sending message:", err);
     }
   };
 
-  if (!user) {
-    return (
-      <div className="flex items-center justify-center h-screen">
-        <p>Please login to access chat</p>
-      </div>
-    );
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const goBack = () => {
+    const path = user?.role === 'doctor' ? '/doctor/chat-rooms' : '/patient';
+    navigate(path);
+  };
+
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
 
   return (
-    <div className="flex flex-col h-screen">
+    <div className="flex flex-col h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-primary text-white p-4 flex items-center">
-        <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
-          <ChevronLeft />
+      <div className="bg-white shadow px-4 py-3 flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={goBack}>
+          <ArrowLeft />
         </Button>
-        <div className="flex-1 flex items-center">
-          {receiver?.profilePic ? (
-            <img 
-              src={receiver.profilePic} 
-              alt={receiver.name} 
-              className="w-8 h-8 rounded-full mr-2"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full bg-primary-foreground flex items-center justify-center mr-2">
-              <span className="text-primary text-sm font-bold">{receiver?.name?.charAt(0)}</span>
-            </div>
-          )}
-          <h1 className="text-xl font-bold">{receiver?.name || 'Chat'}</h1>
-        </div>
-        <div className="flex items-center">
-          {socketConnected ? (
-            <div className="flex items-center text-white/90 text-xs mr-2">
-              <div className="w-2 h-2 rounded-full bg-green-400 mr-1"></div>
-              <span>Live</span>
-            </div>
-          ) : (
-            <div className="flex items-center text-white/90 text-xs mr-2">
-              <div className="w-2 h-2 rounded-full bg-yellow-400 mr-1"></div>
-              <span>Offline</span>
-            </div>
-          )}
+        
+        <Avatar className="h-10 w-10">
+          <AvatarImage src={otherUser?.profilePic} />
+          <AvatarFallback>{otherUser?.full_name?.charAt(0) || '?'}</AvatarFallback>
+        </Avatar>
+        
+        <div>
+          <h1 className="font-semibold">{otherUser?.full_name}</h1>
+          <p className="text-xs text-gray-500">
+            {otherUser?.role === 'doctor' ? 'Doctor' : 'Patient'}
+          </p>
         </div>
       </div>
-
-      {/* Chat Messages */}
-      <div className="flex-1 p-4 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-          </div>
-        ) : messages.length > 0 ? (
-          <div className="space-y-3">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${
-                  message.sender_id === user.id ? "justify-end" : "justify-start"
-                }`}
-              >
-                <div
-                  className={`max-w-[75%] p-3 rounded-lg ${
-                    message.sender_id === user.id
-                      ? "bg-primary text-white rounded-tr-none"
-                      : "bg-gray-200 text-gray-800 rounded-tl-none"
-                  }`}
-                >
-                  <p>{message.content}</p>
-                  <div 
-                    className={`text-xs mt-1 flex items-center justify-end ${
-                      message.sender_id === user.id ? "text-white/70" : "text-gray-500"
-                    }`}
-                  >
-                    <span className="mr-1">
-                      {new Date(message.timestamp).toLocaleTimeString([], {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                      })}
-                    </span>
-                    {message.sender_id === user.id && (
-                      <CheckCheck 
-                        size={14} 
-                        className={message.read ? "text-green-400" : ""} 
-                      />
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        ) : (
-          <div className="flex items-center justify-center h-full text-gray-500">
-            <p>No messages yet. Start the conversation!</p>
-          </div>
-        )}
+      
+      {/* Messages area */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((message) => {
+          const isFromMe = message.sender_id === user?.id;
+          return (
+            <div key={message.id} className={`flex ${isFromMe ? 'justify-end' : 'justify-start'}`}>
+              <Card className={`max-w-[80%] ${isFromMe ? 'bg-primary text-primary-foreground' : 'bg-gray-100'}`}>
+                <CardContent className="p-3">
+                  <p className="text-sm">{message.content}</p>
+                  <p className={`text-xs mt-1 ${isFromMe ? 'text-primary-foreground/70' : 'text-gray-500'}`}>
+                    {format(new Date(message.timestamp), 'p')}
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          );
+        })}
+        <div ref={messagesEndRef} />
       </div>
-
-      {/* Message Input */}
-      <div className="p-4 border-t">
-        <div className="flex">
-          <Input
-            placeholder="Type a message..."
+      
+      {/* Message input */}
+      <div className="border-t p-3 bg-white">
+        <div className="flex gap-2">
+          <Textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            className="flex-1 mr-2"
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message..."
+            className="min-h-[60px] resize-none"
           />
-          <Button onClick={handleSendMessage}>
-            <Send size={18} />
+          <Button 
+            onClick={sendMessage} 
+            disabled={!newMessage.trim()} 
+            className="flex-shrink-0"
+            type="submit"
+          >
+            <Send className="h-4 w-4" />
           </Button>
         </div>
       </div>

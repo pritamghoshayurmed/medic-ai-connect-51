@@ -57,12 +57,14 @@ async function createTables() {
   try {
     // Create profiles table
     console.log("Creating profiles table...");
-    await supabase.rpc('create_core_tables').catch(async (error) => {
+    await supabase.rpc('create_core_tables').then(result => {
+      console.log("RPC create_core_tables result:", result);
+    }).catch(error => {
       console.error("Error using RPC to create tables:", error);
       
       // Fallback: Try manually creating at least the profiles table
       console.log("Falling back to manual table creation");
-      await supabase.rpc('execute_sql', {
+      return supabase.rpc('execute_sql', {
         sql_query: `
           CREATE TABLE IF NOT EXISTS profiles (
             id UUID PRIMARY KEY REFERENCES auth.users(id),
@@ -74,8 +76,10 @@ async function createTables() {
             updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
           );
         `
-      }).catch(e => console.error("Manual table creation failed:", e));
-    });
+      });
+    }).then(result => {
+      console.log("Manual table creation result:", result);
+    }).catch(e => console.error("Manual table creation failed:", e));
     
     console.log("Table initialization completed");
   } catch (error) {
@@ -88,7 +92,13 @@ async function createTables() {
  */
 export async function initializeUserTriggers() {
   try {
-    const { error } = await supabase.rpc('initialize_user_triggers');
+    const { error } = await supabase.rpc('initialize_user_triggers').then(result => {
+      console.log("User triggers initialization result:", result);
+      return result;
+    }).catch(error => {
+      console.error("Error initializing user triggers:", error);
+      return { error };
+    });
     
     if (error) {
       console.error("Error initializing user triggers:", error);

@@ -22,8 +22,8 @@ export interface Patient extends User {
 
 export interface Doctor extends User {
   role: 'doctor';
-  specialty: string;
-  experience: number;
+  specialty?: string;
+  experience?: number;
   education?: string;
   hospital?: string;
   availability?: Availability[];
@@ -84,4 +84,28 @@ export interface Availability {
   startTime: string;
   endTime: string;
   slotDuration: number; // in minutes
+}
+
+// Doctor profile as stored in the database
+export interface DoctorProfile {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  role: string;
+  doctor_profiles: {
+    about?: string;
+    available_days: string[];
+    available_hours: Record<string, any>;
+    consultation_fee: number;
+    experience_years: number;
+    qualification: string;
+    rating?: number;
+    total_reviews?: number;
+    specialty_id?: string;
+  };
+  specialties?: {
+    id: string;
+    name: string;
+  };
 }

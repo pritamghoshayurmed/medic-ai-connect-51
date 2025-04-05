@@ -253,7 +253,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         description: "Your account has been created. You can now login.",
       });
       
-      return true;
+      return;
     } catch (error: any) {
       toast({
         title: "Signup failed",
