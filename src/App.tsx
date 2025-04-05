@@ -1,9 +1,8 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 // Pages
@@ -48,133 +47,131 @@ const App = () => (
       <AuthProvider>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/" element={<Index />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
+        <Routes>
+          {/* Public routes */}
+          <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/signup" element={<Signup />} />
 
-            {/* Patient routes */}
-            <Route
-              path="/patient"
-              element={
-                <ProtectedRoute allowedRoles={['patient']}>
-                  <PatientDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/patient/find-doctor"
-              element={
-                <ProtectedRoute allowedRoles={['patient']}>
-                  <FindDoctor />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/patient/appointments"
-              element={
-                <ProtectedRoute allowedRoles={['patient']}>
-                  <Appointments />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/patient/chat/:id"
-              element={
-                <ProtectedRoute allowedRoles={['patient']}>
-                  <Chat />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/patient/ai-assistant"
-              element={
-                <ProtectedRoute allowedRoles={['patient']}>
-                  <AiAssistant />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/patient/medications"
-              element={
-                <ProtectedRoute allowedRoles={['patient']}>
-                  <MedicationReminders />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/patient/profile"
-              element={
-                <ProtectedRoute allowedRoles={['patient']}>
-                  <PatientProfile />
-                </ProtectedRoute>
-              }
-            />
+          {/* Patient routes */}
+          <Route
+            path="/patient"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <PatientDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patient/find-doctor"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <FindDoctor />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patient/appointments"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <Appointments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patient/chat/:id"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patient/ai-assistant"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <AiAssistant />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patient/medications"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <MedicationReminders />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/patient/profile"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <PatientProfile />
+              </ProtectedRoute>
+            }
+          />
 
-            {/* Doctor routes */}
-            <Route
-              path="/doctor"
-              element={
-                <ProtectedRoute allowedRoles={['doctor']}>
-                  <DoctorDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/doctor/appointments"
-              element={
-                <ProtectedRoute allowedRoles={['doctor']}>
-                  <DoctorAppointments />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/doctor/analytics"
-              element={
-                <ProtectedRoute allowedRoles={['doctor']}>
-                  <DoctorAnalytics />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/doctor/diagnosis"
-              element={
-                <ProtectedRoute allowedRoles={['doctor']}>
-                  <DiagnosisEngine />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/doctor/chat-rooms"
-              element={
-                <ProtectedRoute allowedRoles={['doctor']}>
-                  <DoctorChatRooms />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/doctor/chat/:id"
-              element={
-                <ProtectedRoute allowedRoles={['doctor']}>
-                  <Chat />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/doctor/profile"
-              element={
-                <ProtectedRoute allowedRoles={['doctor']}>
-                  <DoctorProfile />
-                </ProtectedRoute>
-              }
-            />
+          {/* Doctor routes */}
+          <Route
+            path="/doctor"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <DoctorDashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/appointments"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <DoctorAppointments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/analytics"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <DoctorAnalytics />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/diagnosis"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <DiagnosisEngine />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/chat-rooms"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <DoctorChatRooms />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/chat/:id"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <Chat />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/doctor/profile"
+            element={
+              <ProtectedRoute allowedRoles={['doctor']}>
+                <DoctorProfile />
+              </ProtectedRoute>
+            }
+          />
 
-            {/* Catch-all route */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </BrowserRouter>
+          {/* Catch-all route */}
+          <Route path="*" element={<NotFound />} />
+        </Routes>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
