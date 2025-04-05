@@ -1,128 +1,200 @@
-import React, { useState, useEffect } from "react";
+
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { CalendarDays, UserRound, Bell } from "lucide-react";
+import AppointmentCard from "@/components/AppointmentCard";
+import DoctorCard from "@/components/DoctorCard";
+import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Doctor } from "@/types";
-import { processDoctorProfile } from "@/utils/typeHelpers";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Calendar, Clock, MapPin, Phone, ChevronLeft } from "lucide-react";
-import BottomNavigation from "@/components/BottomNavigation";
+import { Appointment, Doctor } from "@/types";
+import { format } from "date-fns";
 
 export default function PatientDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+  const [recommendedDoctors, setRecommendedDoctors] = useState<Doctor[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchDoctors();
-  }, []);
+    if (!user) return;
 
-  const fetchDoctors = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select(`
-          id,
-          full_name,
-          email,
-          phone,
-          role,
-          doctor_profiles (
-            specialty_id,
-            experience_years,
-            qualification,
-            rating
-          )
-        `)
-        .eq('role', 'doctor')
-        .limit(4);
+    const fetchData = async () => {
+      try {
+        // Fetch appointments
+        const { data: appointmentsData, error: appointmentsError } = await supabase
+          .from('appointments')
+          .select(`
+            *,
+            doctor:doctor_id (
+              *,
+              profile:id (
+                full_name
+              )
+            )
+          `)
+          .eq('patient_id', user.id)
+          .order('appointment_date', { ascending: true })
+          .limit(3);
 
-      if (error) throw error;
+        if (appointmentsError) {
+          console.error("Error fetching appointments:", appointmentsError);
+        } else {
+          // Transform data to match our Appointment interface
+          const today = new Date();
+          const formattedAppointments = appointmentsData
+            .filter(appt => new Date(appt.appointment_date) >= today)
+            .map(appt => ({
+              id: appt.id,
+              patientId: appt.patient_id,
+              doctorId: appt.doctor_id,
+              date: appt.appointment_date,
+              time: appt.appointment_time,
+              status: appt.status,
+              reason: appt.symptoms || ''
+            }))
+            .slice(0, 2); // Just get the first 2 upcoming appointments
+          
+          setUpcomingAppointments(formattedAppointments);
+        }
 
-      // Convert to Doctor type using the helper function
-      const doctorList = data.map(doc => processDoctorProfile(doc));
-      setDoctors(doctorList);
-    } catch (error) {
-      console.error('Error fetching doctors:', error);
-    }
+        // Fetch recommended doctors
+        const { data: doctorsData, error: doctorsError } = await supabase
+          .from('profiles')
+          .select(`
+            *,
+            doctor_profiles(*)
+          `)
+          .eq('role', 'doctor')
+          .limit(3);
+
+        if (doctorsError) {
+          console.error("Error fetching doctors:", doctorsError);
+        } else {
+          // Transform data to match our Doctor interface
+          const formattedDoctors = doctorsData.map(doc => ({
+            id: doc.id,
+            name: doc.full_name,
+            email: doc.email,
+            phone: doc.phone || '',
+            role: 'doctor',
+            specialty: 'General Practitioner', // Default value
+            experience: doc.doctor_profiles?.[0]?.experience_years || 5,
+            rating: 4.8, // Default value
+            profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png' // Default image
+          }));
+          
+          setRecommendedDoctors(formattedDoctors);
+        }
+
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [user]);
+
+  const formattedDate = format(new Date(), "EEEE, MMMM d");
+
+  const handleBookAppointment = (doctorId: string) => {
+    navigate(`/patient/find-doctor?selected=${doctorId}`);
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-24">
       {/* Header */}
-      <div className="bg-primary text-white p-4 flex items-center">
-        <h1 className="text-xl font-bold">Dashboard</h1>
-      </div>
-
-      {/* Welcome Message */}
-      <div className="p-4">
-        <h2 className="text-lg font-semibold">
-          Welcome, {user ? user.name : "Guest"}!
-        </h2>
-        <p className="text-gray-600">Here's a quick overview of your health.</p>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="p-4 grid grid-cols-2 gap-4">
-        <Button className="w-full" onClick={() => navigate("/patient/find-doctor")}>
-          Find a Doctor
-        </Button>
-        <Button className="w-full" onClick={() => navigate("/patient/appointments")}>
-          View Appointments
-        </Button>
+      <div className="bg-primary p-6 text-white rounded-b-3xl">
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold">Hello, {user?.name?.split(' ')[0] || 'Patient'}!</h1>
+            <p className="text-sm opacity-90">{formattedDate}</p>
+          </div>
+          <div className="flex space-x-2">
+            <Button variant="ghost" size="icon" className="text-white" onClick={() => navigate("/patient/profile")}>
+              <UserRound />
+            </Button>
+            <Button variant="ghost" size="icon" className="text-white">
+              <Bell />
+            </Button>
+          </div>
+        </div>
+        <div className="mt-6 flex space-x-3">
+          <Button onClick={() => navigate("/patient/find-doctor")} className="bg-white text-primary hover:bg-gray-100 flex-1">
+            Find Doctor
+          </Button>
+          <Button onClick={() => navigate("/patient/appointments")} variant="outline" className="border-white text-white hover:bg-primary/90 flex-1">
+            Appointments
+          </Button>
+        </div>
       </div>
 
       {/* Upcoming Appointments */}
-      <div className="p-4">
-        <h3 className="text-md font-semibold mb-2">Upcoming Appointments</h3>
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-gray-500">No upcoming appointments.</p>
-          </CardContent>
-        </Card>
+      <div className="mt-6 px-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold">Upcoming Appointments</h2>
+          <Button variant="link" className="text-primary p-0" onClick={() => navigate("/patient/appointments")}>
+            View All
+          </Button>
+        </div>
+
+        {upcomingAppointments.length === 0 ? (
+          <div className="bg-gray-50 rounded-lg p-6 text-center">
+            <CalendarDays className="h-12 w-12 mx-auto text-gray-400 mb-2" />
+            <h3 className="font-medium">No Upcoming Appointments</h3>
+            <p className="text-sm text-gray-500 mb-4">You don't have any appointments scheduled</p>
+            <Button onClick={() => navigate("/patient/find-doctor")}>
+              Book an Appointment
+            </Button>
+          </div>
+        ) : (
+          upcomingAppointments.map((appointment) => (
+            <AppointmentCard
+              key={appointment.id}
+              appointment={appointment}
+              person={{
+                id: appointment.doctorId,
+                name: "Dr. Smith",
+                email: "doctor@example.com",
+                role: "doctor",
+                specialty: "General Practitioner"
+              }}
+              onCancel={() => {
+                // Handle cancellation
+              }}
+            />
+          ))
+        )}
       </div>
 
-      {/* Featured Doctors */}
-      <div className="p-4">
-        <h3 className="text-md font-semibold mb-2">Featured Doctors</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {doctors.map((doctor) => (
-            <Card key={doctor.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/doctor/${doctor.id}`)}>
-              <CardContent className="p-4">
-                <div className="flex items-center mb-3">
-                  <Avatar className="mr-3">
-                    <AvatarImage src={doctor.profilePic} alt={doctor.name} />
-                    <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <h4 className="font-semibold">{doctor.name}</h4>
-                    <p className="text-sm text-gray-500">{doctor.specialty || "General Practitioner"}</p>
-                  </div>
-                </div>
-                <div className="text-sm text-gray-600 space-y-2">
-                  <div className="flex items-center">
-                    <Calendar className="h-4 w-4 mr-2" />
-                    <span>Available: Mon, Wed, Fri</span>
-                  </div>
-                  <div className="flex items-center">
-                    <Clock className="h-4 w-4 mr-2" />
-                    <span>9:00 AM - 5:00 PM</span>
-                  </div>
-                  <div className="flex items-center">
-                    <MapPin className="h-4 w-4 mr-2" />
-                    <span>{doctor.hospital || "Unknown Hospital"}</span>
-                  </div>
-                  <div className="flex items-center">
-                    <Phone className="h-4 w-4 mr-2" />
-                    <span>{doctor.phone}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+      {/* Recommended Doctors */}
+      <div className="mt-6 px-4">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-bold">Recommended Doctors</h2>
+          <Button variant="link" className="text-primary p-0" onClick={() => navigate("/patient/find-doctor")}>
+            View All
+          </Button>
         </div>
+
+        {recommendedDoctors.map((doctor) => (
+          <DoctorCard
+            key={doctor.id}
+            doctor={doctor}
+            onBookAppointment={() => handleBookAppointment(doctor.id)}
+          />
+        ))}
       </div>
 
       <BottomNavigation />
