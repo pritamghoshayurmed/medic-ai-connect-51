@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { User, UserRole } from "../types";
 import { supabase } from "@/integrations/supabase/client";
@@ -87,12 +86,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string, role: UserRole) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
       if (error) throw error;
+
+      // Verify that the user has the correct role
+      if (data.user) {
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+
+        if (profileError) {
+          console.error("Error fetching user profile:", profileError);
+          throw new Error("Failed to fetch user profile");
+        }
+
+        // Check if user's role matches the selected role
+        if (profile.role !== role) {
+          await supabase.auth.signOut();
+          throw new Error(`This account is registered as a ${profile.role}. Please select the correct user type.`);
+        }
+      }
     } catch (error: any) {
       toast({
         title: "Login failed",
@@ -108,7 +127,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signup = async (name: string, email: string, password: string, role: UserRole, phone: string) => {
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      // Sign up the user with Supabase Auth
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -122,9 +142,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
+      // Create the user profile manually since the trigger may not be set up yet
+      if (data?.user) {
+        // Insert into profiles table
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .insert({
+            id: data.user.id,
+            email: email,
+            full_name: name,
+            role: role,
+            phone: phone
+          });
+        
+        if (profileError) {
+          console.error("Error creating profile:", profileError);
+        }
+
+        // If doctor, create doctor profile
+        if (role === 'doctor') {
+          const { error: doctorError } = await supabase
+            .from('doctor_profiles')
+            .insert({
+              id: data.user.id,
+              experience_years: 0,
+              qualification: '',
+              consultation_fee: 0,
+              available_days: [],
+              available_hours: {}
+            });
+          
+          if (doctorError) {
+            console.error("Error creating doctor profile:", doctorError);
+          }
+        }
+      }
+
       toast({
         title: "Signup successful",
-        description: "Please check your email to confirm your account.",
+        description: "Your account has been created. You can now login.",
       });
     } catch (error: any) {
       toast({

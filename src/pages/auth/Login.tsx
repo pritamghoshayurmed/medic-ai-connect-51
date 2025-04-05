@@ -23,14 +23,12 @@ export default function Login() {
 
     try {
       await login(email, password, role);
-      navigate(role === "doctor" ? "/doctor" : "/patient");
-    } catch (error) {
-      toast({
-        title: "Login failed",
-        description: "Please check your credentials and try again.",
-        variant: "destructive",
-      });
-    } finally {
+      
+      // Redirect to dashboard will happen via the AuthContext's state change
+      // This avoids race conditions with the auth state
+    } catch (error: any) {
+      console.error("Login error:", error);
+      // Error toasts are already shown in the login function
       setIsLoading(false);
     }
   };

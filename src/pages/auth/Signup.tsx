@@ -36,14 +36,13 @@ export default function Signup() {
 
     try {
       await signup(name, email, password, role, phone);
-      navigate(role === "doctor" ? "/doctor" : "/patient");
-    } catch (error) {
       toast({
-        title: "Signup failed",
-        description: "There was an error creating your account. Please try again.",
-        variant: "destructive",
+        title: "Registration Successful",
+        description: "You can now log in with your credentials.",
       });
-    } finally {
+      navigate("/login");
+    } catch (error: any) {
+      console.error("Signup error:", error);
       setIsLoading(false);
     }
   };
