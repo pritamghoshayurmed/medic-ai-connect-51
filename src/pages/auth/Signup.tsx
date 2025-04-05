@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Signup() {
-  const { signup } = useAuth();
+  const { signup, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -19,6 +20,14 @@ export default function Signup() {
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      const dashboardPath = user.role === "doctor" ? "/doctor" : "/patient";
+      navigate(dashboardPath);
+    }
+  }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,6 +53,11 @@ export default function Signup() {
     setIsLoading(true);
 
     try {
+      toast({
+        title: "Creating account",
+        description: "Setting up your account...",
+      });
+
       await signup(name, email, password, role, phone);
       
       // Clear form fields
@@ -60,12 +74,14 @@ export default function Signup() {
       });
       
       // Navigate to login page
-      setTimeout(() => {
-        navigate("/login");
-      }, 1000);
+      navigate("/login");
     } catch (error: any) {
       console.error("Signup error:", error);
-      // The error toast is already shown by the signup function
+      toast({
+        title: "Signup failed",
+        description: error.message || "There was an error creating your account",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }

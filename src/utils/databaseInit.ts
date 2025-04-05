@@ -1,3 +1,4 @@
+
 import { supabase } from "@/integrations/supabase/client";
 
 let initializationStarted = false;
@@ -98,3 +99,6 @@ export async function initializeUserTriggers() {
     console.error("Error initializing user triggers:", error);
   }
 } 
+
+// Call database initialization on import
+initializeDatabase().catch(console.error);

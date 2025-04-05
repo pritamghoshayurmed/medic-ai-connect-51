@@ -3,6 +3,7 @@ import { User, UserRole } from "../types";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Session } from "@supabase/supabase-js";
+import { useNavigate } from "react-router-dom";
 
 interface AuthContextType {
   user: User | null;
@@ -25,7 +26,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log("Auth state changed:", event, session);
         setSession(session);
+        
         if (session?.user) {
           try {
             // Get profile data
@@ -35,7 +38,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               .eq('id', session.user.id)
               .single();
 
-            if (profileError) throw profileError;
+            if (profileError) {
+              console.error("Error fetching profile:", profileError);
+              throw profileError;
+            }
 
             // Create user object from profile
             const userData: User = {
@@ -59,9 +65,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
             }
 
+            console.log("Setting user data:", userData);
             setUser(userData);
           } catch (error) {
             console.error("Error fetching user profile:", error);
+            // Clear session on error
+            await supabase.auth.signOut();
+            setUser(null);
           }
         } else {
           setUser(null);
@@ -72,6 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
+      console.log("Initial session check:", session);
       setSession(session);
       if (!session) {
         setIsLoading(false);
@@ -168,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       
       console.log("Login process completed successfully");
-      return true;
+      return;
     } catch (error: any) {
       console.error("Login failed:", error);
       toast({

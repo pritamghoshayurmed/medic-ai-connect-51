@@ -1,4 +1,5 @@
-import { useState } from "react";
+
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +10,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, user } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
@@ -17,18 +18,24 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      const dashboardPath = user.role === "doctor" ? "/doctor" : "/patient";
+      navigate(dashboardPath);
+    }
+  }, [user, navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
     try {
-      // Add a delay to ensure the UI updates
-      setTimeout(() => {
-        toast({
-          title: "Logging in",
-          description: "Authenticating your credentials...",
-        });
-      }, 100);
+      // Add a toast notification for the login attempt
+      toast({
+        title: "Logging in",
+        description: "Authenticating your credentials...",
+      });
       
       console.log("Starting login process");
       await login(email, password, role);
@@ -39,10 +46,16 @@ export default function Login() {
         description: "Redirecting to your dashboard...",
       });
       
-      // Redirect will be handled by AuthContext's state change
+      // Navigate based on role
+      const dashboardPath = role === "doctor" ? "/doctor" : "/patient";
+      navigate(dashboardPath);
     } catch (error: any) {
       console.error("Login error:", error);
-      // Error toast is already shown by the login function
+      toast({
+        title: "Login failed",
+        description: error.message || "Please check your credentials and try again",
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }

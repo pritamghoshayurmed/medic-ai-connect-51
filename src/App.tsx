@@ -1,9 +1,12 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { useEffect } from "react";
+import { initializeDatabase } from "./utils/databaseInit";
 
 // Pages
 import Index from "./pages/Index";
@@ -25,6 +28,11 @@ import DiagnosisEngine from "./pages/doctor/DiagnosisEngine";
 import DoctorChatRooms from "./pages/doctor/ChatRooms";
 
 const queryClient = new QueryClient();
+
+// Initialize the database on app startup
+useEffect(() => {
+  initializeDatabase().catch(console.error);
+}, []);
 
 // Protected route component
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) => {
