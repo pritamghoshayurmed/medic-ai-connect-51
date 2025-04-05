@@ -186,6 +186,43 @@ export default function Appointments() {
     }
   };
 
+  const renderAppointmentsList = () => {
+    const filteredAppointments = getFilteredAppointments();
+    
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      );
+    }
+    
+    if (filteredAppointments.length === 0) {
+      return (
+        <div className="text-center py-12 bg-gray-50 rounded-lg">
+          <p className="text-gray-500">No appointments found</p>
+          <Button className="mt-4" onClick={() => navigate("/patient/find-doctor")}>
+            Book an Appointment
+          </Button>
+        </div>
+      );
+    }
+    
+    return filteredAppointments.map((appointment) => (
+      <AppointmentCard
+        key={appointment.id}
+        appointment={appointment}
+        person={appointment.doctor}
+        showCancelButton={appointment.status !== 'cancelled' && appointment.status !== 'completed'}
+        onCancel={() => handleCancel(appointment.id)}
+        onChat={() => navigate(`/patient/chat/${appointment.doctorId}`)}
+        onViewDetails={() => {
+          // Handle view details
+        }}
+      />
+    ));
+  };
+
   return (
     <div className="pb-24">
       <div className="bg-white shadow p-4 flex items-center">
@@ -256,41 +293,4 @@ export default function Appointments() {
       <BottomNavigation />
     </div>
   );
-  
-  function renderAppointmentsList() {
-    const filteredAppointments = getFilteredAppointments();
-    
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-        </div>
-      );
-    }
-    
-    if (filteredAppointments.length === 0) {
-      return (
-        <div className="text-center py-12 bg-gray-50 rounded-lg">
-          <p className="text-gray-500">No appointments found</p>
-          <Button className="mt-4" onClick={() => navigate("/patient/find-doctor")}>
-            Book an Appointment
-          </Button>
-        </div>
-      );
-    }
-    
-    return filteredAppointments.map((appointment) => (
-      <AppointmentCard
-        key={appointment.id}
-        appointment={appointment}
-        person={appointment.doctor}
-        showCancelButton={appointment.status !== 'cancelled' && appointment.status !== 'completed'}
-        onCancel={() => handleCancel(appointment.id)}
-        onChat={() => navigate(`/patient/chat/${appointment.doctorId}`)}
-        onViewDetails={() => {
-          // Handle view details
-        }}
-      />
-    ));
-  }
 }
