@@ -22,6 +22,15 @@ export default function Login() {
     setIsLoading(true);
 
     try {
+      // Add a delay to ensure the UI updates
+      setTimeout(() => {
+        toast({
+          title: "Logging in",
+          description: "Authenticating your credentials...",
+        });
+      }, 100);
+      
+      console.log("Starting login process");
       await login(email, password, role);
       
       // Success message

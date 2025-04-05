@@ -1,47 +1,84 @@
 import { supabase } from "@/integrations/supabase/client";
 
+let initializationStarted = false;
+
 /**
  * Initializes the database by creating all necessary tables if they don't exist.
  * This is a fallback for when Supabase migrations can't be run.
  */
 export async function initializeDatabase() {
+  // Only run initialization once
+  if (initializationStarted) {
+    return;
+  }
+  
+  initializationStarted = true;
   console.log("Checking database tables...");
 
   try {
-    // Check if profiles table exists by querying it
-    const { error: profilesError } = await supabase
+    // We'll try a simple query to verify connection first
+    const { error: connectionError } = await supabase
       .from('profiles')
-      .select('id')
-      .limit(1);
-
-    if (profilesError) {
-      console.log("Profiles table doesn't exist or isn't accessible. Creating core tables...");
-      await createCoreTables();
+      .select('count')
+      .limit(1)
+      .single();
+      
+    if (connectionError) {
+      if (connectionError.code === 'PGRST116') {
+        // This means the table exists but returned no results - which is fine
+        console.log("Database connection successful, tables exist");
+        return;
+      } else if (
+        connectionError.code === '42P01' || // Table doesn't exist
+        connectionError.message.includes("relation") || 
+        connectionError.message.includes("does not exist")
+      ) {
+        console.log("Tables don't exist, attempting to create them");
+        await createTables();
+        return;
+      } else {
+        // Some other error
+        console.error("Database connection error:", connectionError);
+      }
     } else {
-      console.log("Profiles table exists.");
+      console.log("Database connection successful, tables exist");
     }
   } catch (error) {
     console.error("Error initializing database:", error);
+    // Don't block the app from loading if there's an error
   }
 }
 
 /**
- * Creates the core database tables via Supabase RPC
+ * Creates the necessary tables directly via SQL
  */
-async function createCoreTables() {
+async function createTables() {
   try {
-    // Use Supabase's stored procedure or function call to create the tables
-    // We'll try to create the tables via a SQL query since we can't run migrations
-    const { error } = await supabase.rpc('create_core_tables');
-
-    if (error) {
-      console.error("Error creating core tables via RPC:", error);
-      console.log("Database initialization may need to be done manually.");
-    } else {
-      console.log("Core tables created successfully!");
-    }
+    // Create profiles table
+    console.log("Creating profiles table...");
+    await supabase.rpc('create_core_tables').catch(async (error) => {
+      console.error("Error using RPC to create tables:", error);
+      
+      // Fallback: Try manually creating at least the profiles table
+      console.log("Falling back to manual table creation");
+      await supabase.rpc('execute_sql', {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS profiles (
+            id UUID PRIMARY KEY REFERENCES auth.users(id),
+            email TEXT NOT NULL,
+            full_name TEXT NOT NULL,
+            phone TEXT,
+            role TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+          );
+        `
+      }).catch(e => console.error("Manual table creation failed:", e));
+    });
+    
+    console.log("Table initialization completed");
   } catch (error) {
-    console.error("Error creating core tables:", error);
+    console.error("Error creating tables:", error);
   }
 }
 

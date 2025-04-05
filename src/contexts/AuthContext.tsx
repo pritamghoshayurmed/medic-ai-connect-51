@@ -86,46 +86,91 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string, role: UserRole) => {
     setIsLoading(true);
     try {
+      console.log(`Attempting login with email: ${email}, role: ${role}`);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Login error from Supabase:", error);
+        throw error;
+      }
+
+      console.log("Login successful, checking user profile...");
 
       // Verify that the user exists in the profiles table
       if (data.user) {
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', data.user.id)
-          .single();
-
-        if (profileError) {
-          // If profile doesn't exist, create it using the metadata
-          const { error: insertError } = await supabase
+        try {
+          const { data: profile, error: profileError } = await supabase
             .from('profiles')
-            .upsert({
-              id: data.user.id,
-              email: data.user.email || email,
-              full_name: data.user.user_metadata.full_name || 'User',
-              role: role,
-              phone: data.user.user_metadata.phone || ''
-            }, { onConflict: 'id' });
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+
+          if (profileError) {
+            console.log("Profile not found, creating new profile...");
+            // If profile doesn't exist, create it using the metadata
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .upsert({
+                id: data.user.id,
+                email: data.user.email || email,
+                full_name: data.user.user_metadata?.full_name || email.split('@')[0],
+                role: role,
+                phone: data.user.user_metadata?.phone || ''
+              }, { onConflict: 'id' });
+              
+            if (insertError) {
+              console.error("Error creating missing profile:", insertError);
+              // Continue anyway - don't throw error here
+            } else {
+              console.log("Profile created successfully");
+            }
+          } else if (profile.role !== role) {
+            // Role mismatch, sign out and throw error
+            console.error(`Role mismatch: User is a ${profile.role} but trying to log in as ${role}`);
+            await supabase.auth.signOut();
+            throw new Error(`This account is registered as a ${profile.role}. Please select the correct user type.`);
+          } else {
+            console.log("Profile validation successful");
             
-          if (insertError) {
-            console.error("Error creating missing profile:", insertError);
-            throw new Error("Failed to recover user profile");
+            // Create user object from profile
+            const userData: User = {
+              id: profile.id,
+              name: profile.full_name,
+              email: profile.email,
+              phone: profile.phone || '',
+              role: profile.role as UserRole,
+            };
+
+            // If role is doctor, get doctor profile data
+            if (profile.role === 'doctor') {
+              const { data: doctorProfile, error: doctorError } = await supabase
+                .from('doctor_profiles')
+                .select('*')
+                .eq('id', profile.id)
+                .single();
+
+              if (!doctorError && doctorProfile) {
+                userData.profilePic = '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png';
+              }
+            }
+
+            // Set the user explicitly after successful login
+            setUser(userData);
           }
-        } else if (profile.role !== role) {
-          // Role mismatch, sign out and throw error
-          await supabase.auth.signOut();
-          throw new Error(`This account is registered as a ${profile.role}. Please select the correct user type.`);
+        } catch (profileError) {
+          console.error("Error checking user profile:", profileError);
+          // Continue anyway
         }
       }
       
+      console.log("Login process completed successfully");
       return true;
     } catch (error: any) {
+      console.error("Login failed:", error);
       toast({
         title: "Login failed",
         description: error.message || "Please check your credentials and try again",
