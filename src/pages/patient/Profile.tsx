@@ -1,27 +1,279 @@
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ChevronLeft, User, Settings, Bell, LogOut, ChevronRight } from "lucide-react";
+import { ChevronLeft, User, Settings, Bell, LogOut, ChevronRight, Edit } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle,
+  DialogFooter 
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+
+interface PatientProfile {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  medical_info?: {
+    blood_type: string;
+    allergies: string[];
+    chronic_conditions: string[];
+  };
+}
 
 export default function PatientProfile() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { toast } = useToast();
   
+  const [loading, setLoading] = useState(true);
+  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderAlerts, setReminderAlerts] = useState(true);
   const [appointmentReminders, setAppointmentReminders] = useState(true);
+  
+  // Edit modals
+  const [personalInfoDialog, setPersonalInfoDialog] = useState(false);
+  const [medicalInfoDialog, setMedicalInfoDialog] = useState(false);
+  
+  // Form states
+  const [personalInfo, setPersonalInfo] = useState({
+    full_name: '',
+    phone: ''
+  });
+  
+  const [medicalInfo, setMedicalInfo] = useState({
+    blood_type: '',
+    allergies: '',
+    chronic_conditions: ''
+  });
+  
+  // Blood type options
+  const bloodTypes = [
+    "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"
+  ];
+  
+  useEffect(() => {
+    if (!user) return;
+    
+    const fetchPatientProfile = async () => {
+      setLoading(true);
+      try {
+        // Fetch patient profile
+        const { data, error } = await supabase
+          .from('profiles')
+          .select(`
+            id,
+            full_name,
+            email,
+            phone,
+            patient_profiles (
+              blood_type,
+              allergies,
+              chronic_conditions
+            )
+          `)
+          .eq('id', user.id)
+          .single();
+        
+        if (error) throw error;
+        
+        // Set patient profile
+        const profileData: PatientProfile = {
+          id: data.id,
+          full_name: data.full_name,
+          email: data.email,
+          phone: data.phone || ''
+        };
+        
+        if (data.patient_profiles) {
+          profileData.medical_info = {
+            blood_type: data.patient_profiles.blood_type || '',
+            allergies: data.patient_profiles.allergies || [],
+            chronic_conditions: data.patient_profiles.chronic_conditions || []
+          };
+        }
+        
+        setPatientProfile(profileData);
+        
+        // Set form states
+        setPersonalInfo({
+          full_name: data.full_name,
+          phone: data.phone || ''
+        });
+        
+        if (data.patient_profiles) {
+          setMedicalInfo({
+            blood_type: data.patient_profiles.blood_type || '',
+            allergies: (data.patient_profiles.allergies || []).join(', '),
+            chronic_conditions: (data.patient_profiles.chronic_conditions || []).join(', ')
+          });
+        }
+        
+      } catch (error) {
+        console.error("Error fetching patient profile:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load your profile information",
+          variant: "destructive"
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchPatientProfile();
+  }, [user, toast]);
   
   const handleLogout = () => {
     logout();
     navigate("/");
   };
+  
+  const updatePersonalInfo = async () => {
+    if (!user) return;
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: personalInfo.full_name,
+          phone: personalInfo.phone
+        })
+        .eq('id', user.id);
+      
+      if (error) throw error;
+      
+      // Update local state
+      if (patientProfile) {
+        setPatientProfile({
+          ...patientProfile,
+          full_name: personalInfo.full_name,
+          phone: personalInfo.phone
+        });
+      }
+      
+      toast({
+        title: "Profile Updated",
+        description: "Your personal information has been updated successfully"
+      });
+      
+      setPersonalInfoDialog(false);
+    } catch (error) {
+      console.error("Error updating personal info:", error);
+      toast({
+        title: "Update Failed",
+        description: "There was an error updating your information",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  const updateMedicalInfo = async () => {
+    if (!user) return;
+    
+    try {
+      // Process string inputs to arrays
+      const allergiesArray = medicalInfo.allergies
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => item !== '');
+      
+      const conditionsArray = medicalInfo.chronic_conditions
+        .split(',')
+        .map(item => item.trim())
+        .filter(item => item !== '');
+      
+      // Check if patient_profiles entry exists
+      const { data, error: checkError } = await supabase
+        .from('patient_profiles')
+        .select('id')
+        .eq('id', user.id);
+      
+      if (checkError) throw checkError;
+      
+      let updateError;
+      
+      if (data && data.length > 0) {
+        // Update existing profile
+        const { error } = await supabase
+          .from('patient_profiles')
+          .update({
+            blood_type: medicalInfo.blood_type,
+            allergies: allergiesArray,
+            chronic_conditions: conditionsArray
+          })
+          .eq('id', user.id);
+        
+        updateError = error;
+      } else {
+        // Create new profile
+        const { error } = await supabase
+          .from('patient_profiles')
+          .insert({
+            id: user.id,
+            blood_type: medicalInfo.blood_type,
+            allergies: allergiesArray,
+            chronic_conditions: conditionsArray
+          });
+        
+        updateError = error;
+      }
+      
+      if (updateError) throw updateError;
+      
+      // Update local state
+      if (patientProfile) {
+        setPatientProfile({
+          ...patientProfile,
+          medical_info: {
+            blood_type: medicalInfo.blood_type,
+            allergies: allergiesArray,
+            chronic_conditions: conditionsArray
+          }
+        });
+      }
+      
+      toast({
+        title: "Medical Info Updated",
+        description: "Your medical information has been updated successfully"
+      });
+      
+      setMedicalInfoDialog(false);
+    } catch (error) {
+      console.error("Error updating medical info:", error);
+      toast({
+        title: "Update Failed",
+        description: "There was an error updating your medical information",
+        variant: "destructive"
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="pb-24">
@@ -47,9 +299,9 @@ export default function PatientProfile() {
           )}
         </div>
         <div>
-          <h2 className="text-xl font-bold">{user?.name}</h2>
-          <p className="text-gray-600">{user?.email}</p>
-          <p className="text-gray-600">{user?.phone}</p>
+          <h2 className="text-xl font-bold">{patientProfile?.full_name}</h2>
+          <p className="text-gray-600">{patientProfile?.email}</p>
+          <p className="text-gray-600">{patientProfile?.phone || 'No phone number'}</p>
         </div>
       </div>
 
@@ -66,44 +318,78 @@ export default function PatientProfile() {
         <TabsContent value="account">
           <div className="space-y-4">
             <div className="bg-white rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">Personal Information</h3>
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-semibold">Personal Information</h3>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setPersonalInfoDialog(true)}
+                >
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <p className="text-gray-600">Full Name</p>
-                  <p>{user?.name}</p>
+                  <p>{patientProfile?.full_name}</p>
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-gray-600">Email</p>
-                  <p>{user?.email}</p>
+                  <p>{patientProfile?.email}</p>
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-gray-600">Phone</p>
-                  <p>{user?.phone}</p>
+                  <p>{patientProfile?.phone || 'Not provided'}</p>
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-2">
-                  Edit Profile
-                </Button>
               </div>
             </div>
             
             <div className="bg-white rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">Medical Information</h3>
+              <div className="flex justify-between items-center mb-2">
+                <h3 className="font-semibold">Medical Information</h3>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => setMedicalInfoDialog(true)}
+                >
+                  <Edit className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+              </div>
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <p className="text-gray-600">Blood Type</p>
-                  <p>A+</p>
+                  <p>{patientProfile?.medical_info?.blood_type || 'Not provided'}</p>
                 </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Allergies</p>
-                  <p>None</p>
+                <div>
+                  <p className="text-gray-600 mb-1">Allergies</p>
+                  {patientProfile?.medical_info?.allergies && patientProfile.medical_info.allergies.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {patientProfile.medical_info.allergies.map((allergy, idx) => (
+                        <span key={idx} className="text-sm bg-gray-100 px-2 py-0.5 rounded">
+                          {allergy}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm">None</p>
+                  )}
                 </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Chronic Conditions</p>
-                  <p>None</p>
+                <div>
+                  <p className="text-gray-600 mb-1">Chronic Conditions</p>
+                  {patientProfile?.medical_info?.chronic_conditions && patientProfile.medical_info.chronic_conditions.length > 0 ? (
+                    <div className="flex flex-wrap gap-1">
+                      {patientProfile.medical_info.chronic_conditions.map((condition, idx) => (
+                        <span key={idx} className="text-sm bg-gray-100 px-2 py-0.5 rounded">
+                          {condition}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm">None</p>
+                  )}
                 </div>
-                <Button variant="outline" size="sm" className="w-full mt-2">
-                  Update Medical Info
-                </Button>
               </div>
             </div>
             
@@ -203,6 +489,116 @@ export default function PatientProfile() {
           <LogOut className="mr-2 h-4 w-4" /> Logout
         </Button>
       </div>
+
+      {/* Edit Personal Info Dialog */}
+      <Dialog open={personalInfoDialog} onOpenChange={setPersonalInfoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Personal Information</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="full-name">Full Name</Label>
+              <Input
+                id="full-name"
+                value={personalInfo.full_name}
+                onChange={(e) => setPersonalInfo({...personalInfo, full_name: e.target.value})}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                value={patientProfile?.email || ''}
+                disabled
+              />
+              <p className="text-xs text-gray-500">Email cannot be changed</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                value={personalInfo.phone}
+                onChange={(e) => setPersonalInfo({...personalInfo, phone: e.target.value})}
+                placeholder="Enter your phone number"
+              />
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setPersonalInfoDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={updatePersonalInfo}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Edit Medical Info Dialog */}
+      <Dialog open={medicalInfoDialog} onOpenChange={setMedicalInfoDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Medical Information</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="blood-type">Blood Type</Label>
+              <Select 
+                value={medicalInfo.blood_type}
+                onValueChange={(value) => setMedicalInfo({...medicalInfo, blood_type: value})}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select blood type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bloodTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="allergies">Allergies</Label>
+              <Input
+                id="allergies"
+                value={medicalInfo.allergies}
+                onChange={(e) => setMedicalInfo({...medicalInfo, allergies: e.target.value})}
+                placeholder="Enter allergies separated by commas"
+              />
+              <p className="text-xs text-gray-500">Separate multiple allergies with commas</p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="conditions">Chronic Conditions</Label>
+              <Input
+                id="conditions"
+                value={medicalInfo.chronic_conditions}
+                onChange={(e) => setMedicalInfo({...medicalInfo, chronic_conditions: e.target.value})}
+                placeholder="Enter conditions separated by commas"
+              />
+              <p className="text-xs text-gray-500">Separate multiple conditions with commas</p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="secondary" onClick={() => setMedicalInfoDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={updateMedicalInfo}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <BottomNavigation />
     </div>

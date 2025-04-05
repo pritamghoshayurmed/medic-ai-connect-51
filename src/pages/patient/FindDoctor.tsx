@@ -171,6 +171,8 @@ export default function FindDoctor() {
 
   const handleBookAppointment = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
+    // Set default booking date to today
+    setBookingDate(new Date());
     setIsDialogOpen(true);
   };
 
@@ -187,6 +189,17 @@ export default function FindDoctor() {
     try {
       // Format date and time
       const formattedDate = bookingDate.toISOString().split('T')[0];
+      const today = new Date().toISOString().split('T')[0];
+
+      // Validate the date is not in the past
+      if (formattedDate < today) {
+        toast({
+          title: "Invalid date",
+          description: "Cannot book appointments in the past.",
+          variant: "destructive",
+        });
+        return;
+      }
 
       // Insert appointment into database
       const { data, error } = await supabase

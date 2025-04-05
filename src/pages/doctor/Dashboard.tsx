@@ -202,6 +202,76 @@ export default function DoctorDashboard() {
     fetchDashboardData();
   }, [user, toast]);
 
+  const handleAppointmentAction = async (appointmentId: string, action: 'confirm' | 'cancel' | 'complete') => {
+    if (!user) return;
+    
+    setLoading(true);
+    try {
+      // Update appointment status
+      const status = action === 'confirm' ? 'confirmed' : action === 'cancel' ? 'cancelled' : 'completed';
+      
+      const { error } = await supabase
+        .from('appointments')
+        .update({ status })
+        .eq('id', appointmentId);
+
+      if (error) throw error;
+
+      // Get appointment details for notification
+      const { data: appointmentData, error: fetchError } = await supabase
+        .from('appointments')
+        .select(`
+          appointment_date,
+          appointment_time,
+          patient_id,
+          profiles:patient_id (full_name)
+        `)
+        .eq('id', appointmentId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Create notification for the patient
+      const actionText = action === 'confirm' ? 'confirmed' : action === 'cancel' ? 'cancelled' : 'completed';
+      
+      await supabase
+        .from('notifications')
+        .insert({
+          user_id: appointmentData.patient_id,
+          title: `Appointment ${actionText.charAt(0).toUpperCase() + actionText.slice(1)}`,
+          message: `Your appointment on ${appointmentData.appointment_date} at ${appointmentData.appointment_time} has been ${actionText} by Dr. ${user.name}.`,
+          type: 'appointment'
+        });
+
+      // Update UI
+      const updateAppointments = (appointments: (Appointment & { patient: Patient })[]) => {
+        return appointments.map(apt => 
+          apt.id === appointmentId 
+            ? { ...apt, status: status as 'confirmed' | 'cancelled' | 'completed' | 'pending' } 
+            : apt
+        );
+      };
+
+      setTodayAppointments(updateAppointments(todayAppointments));
+      setUpcomingAppointments(updateAppointments(upcomingAppointments));
+
+      toast({
+        title: "Success",
+        description: `Appointment has been ${actionText}.`
+      });
+
+    } catch (error) {
+      console.error(`Error ${action}ing appointment:`, error);
+      toast({
+        title: "Error",
+        description: `Failed to ${action} the appointment.`,
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="pb-24">
       {/* Header */}
@@ -307,12 +377,41 @@ export default function DoctorDashboard() {
               </div>
             ) : todayAppointments.length > 0 ? (
               todayAppointments.map((appointment) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                  person={appointment.patient}
-                  onChat={() => navigate(`/chat/${appointment.patientId}`)}
-                />
+                <div key={appointment.id} className="mb-4">
+                  <AppointmentCard
+                    key={appointment.id}
+                    appointment={appointment}
+                    person={appointment.patient}
+                    onChat={() => navigate(`/chat/${appointment.patientId}`)}
+                  />
+                  {appointment.status === "pending" && (
+                    <div className="flex gap-2 mt-2">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={() => handleAppointmentAction(appointment.id, 'confirm')}
+                      >
+                        Accept
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        className="flex-1"
+                        onClick={() => handleAppointmentAction(appointment.id, 'cancel')}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  )}
+                  {appointment.status === "confirmed" && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full mt-2"
+                      onClick={() => handleAppointmentAction(appointment.id, 'complete')}
+                    >
+                      Mark as Completed
+                    </Button>
+                  )}
+                </div>
               ))
             ) : (
               <div className="text-center py-6 bg-gray-50 rounded-lg">
@@ -330,12 +429,32 @@ export default function DoctorDashboard() {
               </div>
             ) : upcomingAppointments.length > 0 ? (
               upcomingAppointments.map((appointment) => (
-                <AppointmentCard
-                  key={appointment.id}
-                  appointment={appointment}
-                  person={appointment.patient}
-                  onChat={() => navigate(`/chat/${appointment.patientId}`)}
-                />
+                <div key={appointment.id} className="mb-4">
+                  <AppointmentCard
+                    key={appointment.id}
+                    appointment={appointment}
+                    person={appointment.patient}
+                    onChat={() => navigate(`/chat/${appointment.patientId}`)}
+                  />
+                  {appointment.status === "pending" && (
+                    <div className="flex gap-2 mt-2">
+                      <Button 
+                        variant="outline" 
+                        className="flex-1"
+                        onClick={() => handleAppointmentAction(appointment.id, 'confirm')}
+                      >
+                        Accept
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        className="flex-1"
+                        onClick={() => handleAppointmentAction(appointment.id, 'cancel')}
+                      >
+                        Decline
+                      </Button>
+                    </div>
+                  )}
+                </div>
               ))
             ) : (
               <div className="text-center py-6 bg-gray-50 rounded-lg">
