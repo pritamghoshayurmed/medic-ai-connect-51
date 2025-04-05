@@ -32,17 +32,41 @@ export default function Signup() {
       return;
     }
     
+    if (password.length < 6) {
+      toast({
+        title: "Password too short",
+        description: "Password must be at least 6 characters long.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setIsLoading(true);
 
     try {
       await signup(name, email, password, role, phone);
+      
+      // Clear form fields
+      setName("");
+      setEmail("");
+      setPhone("");
+      setPassword("");
+      setConfirmPassword("");
+      
+      // Show success message
       toast({
         title: "Registration Successful",
         description: "You can now log in with your credentials.",
       });
-      navigate("/login");
+      
+      // Navigate to login page
+      setTimeout(() => {
+        navigate("/login");
+      }, 1000);
     } catch (error: any) {
       console.error("Signup error:", error);
+      // The error toast is already shown by the signup function
+    } finally {
       setIsLoading(false);
     }
   };

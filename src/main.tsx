@@ -1,5 +1,18 @@
-import { createRoot } from 'react-dom/client'
-import App from './App.tsx'
-import './index.css'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import { BrowserRouter } from 'react-router-dom';
+import './globals.css';
+import App from './App';
+import { initializeDatabase } from './utils/databaseInit';
 
-createRoot(document.getElementById("root")!).render(<App />);
+// Initialize database tables (this is a fallback in case migrations don't run)
+// This won't do anything if tables already exist
+initializeDatabase().catch(console.error);
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>,
+);

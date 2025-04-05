@@ -24,11 +24,17 @@ export default function Login() {
     try {
       await login(email, password, role);
       
-      // Redirect to dashboard will happen via the AuthContext's state change
-      // This avoids race conditions with the auth state
+      // Success message
+      toast({
+        title: "Login successful",
+        description: "Redirecting to your dashboard...",
+      });
+      
+      // Redirect will be handled by AuthContext's state change
     } catch (error: any) {
       console.error("Login error:", error);
-      // Error toasts are already shown in the login function
+      // Error toast is already shown by the login function
+    } finally {
       setIsLoading(false);
     }
   };

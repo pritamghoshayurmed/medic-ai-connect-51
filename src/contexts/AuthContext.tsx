@@ -93,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      // Verify that the user has the correct role
+      // Verify that the user exists in the profiles table
       if (data.user) {
         const { data: profile, error: profileError } = await supabase
           .from('profiles')
@@ -102,20 +102,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (profileError) {
-          console.error("Error fetching user profile:", profileError);
-          throw new Error("Failed to fetch user profile");
-        }
-
-        // Check if user's role matches the selected role
-        if (profile.role !== role) {
+          // If profile doesn't exist, create it using the metadata
+          const { error: insertError } = await supabase
+            .from('profiles')
+            .upsert({
+              id: data.user.id,
+              email: data.user.email || email,
+              full_name: data.user.user_metadata.full_name || 'User',
+              role: role,
+              phone: data.user.user_metadata.phone || ''
+            }, { onConflict: 'id' });
+            
+          if (insertError) {
+            console.error("Error creating missing profile:", insertError);
+            throw new Error("Failed to recover user profile");
+          }
+        } else if (profile.role !== role) {
+          // Role mismatch, sign out and throw error
           await supabase.auth.signOut();
           throw new Error(`This account is registered as a ${profile.role}. Please select the correct user type.`);
         }
       }
+      
+      return true;
     } catch (error: any) {
       toast({
         title: "Login failed",
-        description: error.message,
+        description: error.message || "Please check your credentials and try again",
         variant: "destructive",
       });
       throw error;
@@ -142,35 +155,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) throw error;
 
-      // Create the user profile manually since the trigger may not be set up yet
       if (data?.user) {
         // Insert into profiles table
         const { error: profileError } = await supabase
           .from('profiles')
-          .insert({
+          .upsert({
             id: data.user.id,
             email: email,
             full_name: name,
             role: role,
             phone: phone
-          });
+          }, { onConflict: 'id' });
         
         if (profileError) {
           console.error("Error creating profile:", profileError);
+          // Try to continue even if there's an error with profile creation
+          // The database trigger might handle this
         }
 
         // If doctor, create doctor profile
         if (role === 'doctor') {
           const { error: doctorError } = await supabase
             .from('doctor_profiles')
-            .insert({
+            .upsert({
               id: data.user.id,
               experience_years: 0,
               qualification: '',
               consultation_fee: 0,
               available_days: [],
               available_hours: {}
-            });
+            }, { onConflict: 'id' });
           
           if (doctorError) {
             console.error("Error creating doctor profile:", doctorError);
@@ -182,10 +196,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         title: "Signup successful",
         description: "Your account has been created. You can now login.",
       });
+      
+      return true;
     } catch (error: any) {
       toast({
         title: "Signup failed",
-        description: error.message,
+        description: error.message || "There was an error creating your account",
         variant: "destructive",
       });
       throw error;
