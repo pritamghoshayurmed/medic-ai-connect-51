@@ -97,7 +97,10 @@ export default function PatientProfile() {
           .eq('id', user.id)
           .single();
         
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error("Profile fetch error:", profileError);
+          throw profileError;
+        }
         
         // Set patient profile
         const patientData: PatientProfile = {
@@ -108,23 +111,28 @@ export default function PatientProfile() {
           role: profileData.role
         };
         
-        // Separately fetch patient_profiles data
-        const { data: medicalData, error: medicalError } = await supabase
-          .from('patient_profiles')
-          .select(`
-            blood_type,
-            allergies,
-            chronic_conditions
-          `)
-          .eq('id', user.id)
-          .single();
-        
-        if (!medicalError && medicalData) {
-          patientData.medical_info = {
-            blood_type: medicalData.blood_type || '',
-            allergies: medicalData.allergies || [],
-            chronic_conditions: medicalData.chronic_conditions || []
-          };
+        // Try to fetch medical info using direct table access
+        try {
+          const { data: medicalData, error: medicalError } = await supabase
+            .from('patient_medical_info')
+            .select(`
+              blood_type,
+              allergies,
+              chronic_conditions
+            `)
+            .eq('patient_id', user.id)
+            .single();
+          
+          if (!medicalError && medicalData) {
+            patientData.medical_info = {
+              blood_type: medicalData.blood_type || '',
+              allergies: medicalData.allergies || [],
+              chronic_conditions: medicalData.chronic_conditions || []
+            };
+          }
+        } catch (medicalError) {
+          console.error("Medical info fetch error:", medicalError);
+          // Continue even if medical info is not available
         }
         
         setPatientProfile(patientData);
@@ -135,11 +143,11 @@ export default function PatientProfile() {
           phone: profileData.phone || ''
         });
         
-        if (!medicalError && medicalData) {
+        if (patientData.medical_info) {
           setMedicalInfo({
-            blood_type: medicalData.blood_type || '',
-            allergies: (medicalData.allergies || []).join(', '),
-            chronic_conditions: (medicalData.chronic_conditions || []).join(', ')
+            blood_type: patientData.medical_info.blood_type || '',
+            allergies: (patientData.medical_info.allergies || []).join(', '),
+            chronic_conditions: (patientData.medical_info.chronic_conditions || []).join(', ')
           });
         }
         
@@ -178,11 +186,11 @@ export default function PatientProfile() {
       if (error) throw error;
       
       // Update local state
-      setPatientProfile({
-        ...patientProfile,
+      setPatientProfile(prevProfile => ({
+        ...prevProfile,
         name: personalInfo.full_name,
         phone: personalInfo.phone
-      });
+      }));
       
       toast({
         title: "Profile Updated",
@@ -215,53 +223,71 @@ export default function PatientProfile() {
         .map(item => item.trim())
         .filter(item => item !== '');
       
-      // Check if patient_profiles entry exists
-      const { data, error: checkError } = await supabase
-        .from('patient_profiles')
-        .select('id')
-        .eq('id', user.id);
+      // First, check if patient_medical_info table exists and has an entry for this user
+      const { count, error: checkError } = await supabase
+        .from('patient_medical_info')
+        .select('*', { count: 'exact', head: true })
+        .eq('patient_id', user.id);
+        
+      if (checkError) {
+        // Table might not exist, create it
+        const { error: createTableError } = await supabase.rpc('execute_sql', {
+          sql_query: `
+            CREATE TABLE IF NOT EXISTS patient_medical_info (
+              id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+              patient_id UUID REFERENCES profiles(id) NOT NULL,
+              blood_type TEXT,
+              allergies TEXT[],
+              chronic_conditions TEXT[],
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+              UNIQUE(patient_id)
+            );
+          `
+        });
+        
+        if (createTableError) {
+          console.error("Error creating medical info table:", createTableError);
+          throw createTableError;
+        }
+      }
       
-      if (checkError) throw checkError;
-      
-      let updateError;
-      
-      if (data && data.length > 0) {
-        // Update existing profile using direct table access
-        const { error } = await supabase
-          .from('patient_profiles')
+      // Now try inserting/updating the data
+      if (!count) {
+        // Insert new record
+        const { error: insertError } = await supabase
+          .from('patient_medical_info')
+          .insert({
+            patient_id: user.id,
+            blood_type: medicalInfo.blood_type,
+            allergies: allergiesArray,
+            chronic_conditions: conditionsArray
+          });
+          
+        if (insertError) throw insertError;
+      } else {
+        // Update existing record
+        const { error: updateError } = await supabase
+          .from('patient_medical_info')
           .update({
             blood_type: medicalInfo.blood_type,
             allergies: allergiesArray,
             chronic_conditions: conditionsArray
           })
-          .eq('id', user.id);
-        
-        updateError = error;
-      } else {
-        // Create new profile using direct table access
-        const { error } = await supabase
-          .from('patient_profiles')
-          .insert({
-            id: user.id,
-            blood_type: medicalInfo.blood_type,
-            allergies: allergiesArray,
-            chronic_conditions: conditionsArray
-          });
-        
-        updateError = error;
+          .eq('patient_id', user.id);
+          
+        if (updateError) throw updateError;
       }
       
-      if (updateError) throw updateError;
-      
       // Update local state
-      setPatientProfile({
-        ...patientProfile,
+      setPatientProfile(prevProfile => ({
+        ...prevProfile,
         medical_info: {
           blood_type: medicalInfo.blood_type,
           allergies: allergiesArray,
           chronic_conditions: conditionsArray
         }
-      });
+      }));
       
       toast({
         title: "Medical Info Updated",
@@ -303,7 +329,7 @@ export default function PatientProfile() {
           {user?.profilePic ? (
             <img
               src={user.profilePic}
-              alt={user.name}
+              alt={patientProfile.name}
               className="w-full h-full rounded-full object-cover"
             />
           ) : (
@@ -311,9 +337,9 @@ export default function PatientProfile() {
           )}
         </div>
         <div>
-          <h2 className="text-xl font-bold">{patientProfile?.full_name}</h2>
-          <p className="text-gray-600">{patientProfile?.email}</p>
-          <p className="text-gray-600">{patientProfile?.phone || 'No phone number'}</p>
+          <h2 className="text-xl font-bold">{patientProfile.name}</h2>
+          <p className="text-gray-600">{patientProfile.email}</p>
+          <p className="text-gray-600">{patientProfile.phone || 'No phone number'}</p>
         </div>
       </div>
 
@@ -344,15 +370,15 @@ export default function PatientProfile() {
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
                   <p className="text-gray-600">Full Name</p>
-                  <p>{patientProfile?.full_name}</p>
+                  <p>{patientProfile.name}</p>
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-gray-600">Email</p>
-                  <p>{patientProfile?.email}</p>
+                  <p>{patientProfile.email}</p>
                 </div>
                 <div className="flex justify-between items-center">
                   <p className="text-gray-600">Phone</p>
-                  <p>{patientProfile?.phone || 'Not provided'}</p>
+                  <p>{patientProfile.phone || 'Not provided'}</p>
                 </div>
               </div>
             </div>
@@ -523,7 +549,7 @@ export default function PatientProfile() {
               <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
-                value={patientProfile?.email || ''}
+                value={patientProfile.email || ''}
                 disabled
               />
               <p className="text-xs text-gray-500">Email cannot be changed</p>

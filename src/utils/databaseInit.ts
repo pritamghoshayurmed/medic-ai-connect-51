@@ -56,31 +56,24 @@ async function createTables() {
   try {
     // Create profiles table
     console.log("Creating profiles table...");
-    const { error } = await supabase.rpc('create_core_tables');
     
-    if (error) {
-      console.error("Error using RPC to create tables:", error);
-      
-      // Fallback: Try manually creating at least the profiles table using raw SQL
-      console.log("Falling back to manual table creation");
-      
-      const { error: sqlError } = await supabase.rpc('execute_sql', {
-        sql_query: `
-          CREATE TABLE IF NOT EXISTS profiles (
-            id UUID PRIMARY KEY REFERENCES auth.users(id),
-            email TEXT NOT NULL,
-            full_name TEXT NOT NULL,
-            phone TEXT,
-            role TEXT NOT NULL,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-          );
-        `
-      });
-      
-      if (sqlError) {
-        console.error("Manual table creation failed:", sqlError);
-      }
+    // Use raw SQL queries since RPC might not exist yet
+    const { error: createProfilesError } = await supabase.rpc('execute_sql', {
+      sql_query: `
+        CREATE TABLE IF NOT EXISTS profiles (
+          id UUID PRIMARY KEY REFERENCES auth.users(id),
+          email TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          phone TEXT,
+          role TEXT NOT NULL,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+        );
+      `
+    });
+    
+    if (createProfilesError) {
+      console.error("Error creating profiles table:", createProfilesError);
     }
     
     console.log("Table initialization completed");
@@ -94,10 +87,32 @@ async function createTables() {
  */
 export async function initializeUserTriggers() {
   try {
-    const { error } = await supabase.rpc('initialize_user_triggers');
+    // Use raw SQL to create the user triggers
+    const { error: initError } = await supabase.rpc('execute_sql', {
+      sql_query: `
+        CREATE OR REPLACE FUNCTION public.handle_new_user()
+        RETURNS TRIGGER AS $$
+        BEGIN
+          INSERT INTO public.profiles (id, email, full_name, role)
+          VALUES (
+            NEW.id,
+            NEW.email,
+            COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email),
+            COALESCE(NEW.raw_user_meta_data->>'role', 'patient')
+          );
+          RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+        DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+        CREATE TRIGGER on_auth_user_created
+          AFTER INSERT ON auth.users
+          FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+      `
+    });
     
-    if (error) {
-      console.error("Error initializing user triggers:", error);
+    if (initError) {
+      console.error("Error initializing user triggers:", initError);
     } else {
       console.log("User triggers initialized successfully!");
     }

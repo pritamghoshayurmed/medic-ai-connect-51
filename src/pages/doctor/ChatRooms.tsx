@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -42,7 +41,7 @@ export default function DoctorChatRooms() {
     const fetchChats = async () => {
       setLoading(true);
       try {
-        // Fetch messages between users, with proper column selection and hints
+        // Fetch messages between users with explicit relationship hints
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select(`
@@ -52,13 +51,16 @@ export default function DoctorChatRooms() {
             content,
             timestamp,
             read,
-            sender:sender_id(id, full_name, role),
-            receiver:receiver_id(id, full_name, role)
+            sender:profiles!messages_sender_id_fkey(id, full_name, role),
+            receiver:profiles!messages_receiver_id_fkey(id, full_name, role)
           `)
           .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
           .order('timestamp', { ascending: false });
 
-        if (messagesError) throw messagesError;
+        if (messagesError) {
+          console.error("Messages fetch error:", messagesError);
+          throw messagesError;
+        }
 
         // Process messages to create chat rooms
         const messagesByUser = new Map<string, {
@@ -71,7 +73,7 @@ export default function DoctorChatRooms() {
         }>();
 
         // Group messages by user
-        messagesData.forEach(msg => {
+        messagesData?.forEach(msg => {
           // Determine if the other user is a patient or doctor
           let otherUserId: string;
           let otherUserName: string;
@@ -134,26 +136,29 @@ export default function DoctorChatRooms() {
         setPatientChats(patientChatsList);
         setDoctorChats(doctorChatsList);
 
-        // Fetch available doctors for creating new chats without specialty_id relation
+        // Fetch available doctors for creating new chats
         const { data: doctorsData, error: doctorsError } = await supabase
           .from('profiles')
           .select(`
             id,
             full_name,
-            doctor_profiles (
+            doctor_profiles:doctor_profiles(
               experience_years
             )
           `)
           .eq('role', 'doctor')
           .neq('id', user.id);
 
-        if (doctorsError) throw doctorsError;
+        if (doctorsError) {
+          console.error("Doctors fetch error:", doctorsError);
+          throw doctorsError;
+        }
 
-        const formattedDoctors = doctorsData.map((doc: any) => ({
+        const formattedDoctors = doctorsData?.map((doc: any) => ({
           id: doc.id,
           name: doc.full_name,
-          specialty: 'General Practitioner'
-        }));
+          specialty: 'General Practitioner' // Default value
+        })) || [];
 
         setAvailableDoctors(formattedDoctors);
 
@@ -258,7 +263,7 @@ export default function DoctorChatRooms() {
         if (error) throw error;
         
         // Send an initial message if this is the first conversation
-        if (data.length === 0) {
+        if (!data || data.length === 0) {
           const { error: sendError } = await supabase
             .from('messages')
             .insert({

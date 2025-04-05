@@ -1,3 +1,4 @@
+
 export type UserRole = 'patient' | 'doctor';
 
 export interface User {
@@ -50,7 +51,7 @@ export interface DoctorProfile {
   email: string;
   phone: string;
   role: string;
-  doctor_profiles: {
+  doctor_profiles?: {
     about?: string;
     available_days?: string[];
     available_hours?: Record<string, any>;
@@ -61,7 +62,7 @@ export interface DoctorProfile {
     total_reviews?: number;
     specialty_id?: string;
   };
-  specialties?: {
+  specialty?: {
     id: string;
     name: string;
   };

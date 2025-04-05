@@ -60,7 +60,7 @@ interface DoctorProfile {
     about: string;
     consultation_fee: number;
     available_days: string[];
-    available_hours: any;
+    available_hours: Record<string, string[]>;
   };
   specialty?: {
     id: string;
@@ -119,25 +119,45 @@ export default function DoctorProfile() {
       try {
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('*')
+          .select(`
+            id,
+            full_name,
+            email,
+            phone,
+            role
+          `)
           .eq('id', user.id)
           .single();
         
-        if (profileError) throw profileError;
+        if (profileError) {
+          console.error("Profile fetch error:", profileError);
+          throw profileError;
+        }
         
         const { data: doctorData, error: doctorError } = await supabase
           .from('doctor_profiles')
-          .select('*')
+          .select(`
+            specialty_id,
+            experience_years,
+            qualification,
+            about,
+            consultation_fee,
+            available_days,
+            available_hours
+          `)
           .eq('id', user.id)
           .single();
         
-        if (doctorError) throw doctorError;
+        if (doctorError && doctorError.code !== 'PGRST116') {
+          console.error("Doctor profile fetch error:", doctorError);
+          throw doctorError;
+        }
         
         let specialtyInfo = null;
-        if (doctorData.specialty_id) {
+        if (doctorData?.specialty_id) {
           const { data: specialtyData, error: specialtyError } = await supabase
             .from('specialties')
-            .select('*')
+            .select('id, name')
             .eq('id', doctorData.specialty_id)
             .single();
             
@@ -151,17 +171,20 @@ export default function DoctorProfile() {
           full_name: profileData.full_name,
           email: profileData.email,
           phone: profileData.phone || '',
-          role: profileData.role,
-          doctor_profile: {
+          role: profileData.role
+        };
+        
+        if (doctorData) {
+          doctorProfileData.doctor_profile = {
             specialty_id: doctorData.specialty_id || '',
             experience_years: doctorData.experience_years || 0,
             qualification: doctorData.qualification || '',
             about: doctorData.about || '',
             consultation_fee: doctorData.consultation_fee || 0,
             available_days: doctorData.available_days || [],
-            available_hours: doctorData.available_hours || {}
-          }
-        };
+            available_hours: doctorData.available_hours as Record<string, string[]> || {}
+          };
+        }
         
         if (specialtyInfo) {
           doctorProfileData.specialty = {
@@ -178,15 +201,17 @@ export default function DoctorProfile() {
           phone: profileData.phone || ''
         });
         
-        setProfessionalInfo({
-          specialty_id: doctorData.specialty_id || '',
-          experience_years: doctorData.experience_years || 0,
-          qualification: doctorData.qualification || '',
-          about: doctorData.about || '',
-          consultation_fee: doctorData.consultation_fee || 0
-        });
+        if (doctorData) {
+          setProfessionalInfo({
+            specialty_id: doctorData.specialty_id || '',
+            experience_years: doctorData.experience_years || 0,
+            qualification: doctorData.qualification || '',
+            about: doctorData.about || '',
+            consultation_fee: doctorData.consultation_fee || 0
+          });
+        }
         
-        if (doctorData.available_hours) {
+        if (doctorData?.available_hours) {
           const hours = doctorData.available_hours as Record<string, string[]>;
           
           const updatedSlots = availabilitySlots.map(slot => {
@@ -201,10 +226,14 @@ export default function DoctorProfile() {
         
         const { data: specialtiesData, error: specialtiesError } = await supabase
           .from('specialties')
-          .select('*');
+          .select('id, name');
         
-        if (specialtiesError) throw specialtiesError;
-        setSpecialties(specialtiesData);
+        if (specialtiesError) {
+          console.error("Specialties fetch error:", specialtiesError);
+          throw specialtiesError;
+        }
+        
+        setSpecialties(specialtiesData || []);
       } catch (error) {
         console.error("Error fetching doctor profile:", error);
         toast({
@@ -267,21 +296,49 @@ export default function DoctorProfile() {
     if (!user) return;
     
     try {
-      const { error } = await supabase
+      const { count } = await supabase
         .from('doctor_profiles')
-        .update({
-          specialty_id: professionalInfo.specialty_id,
-          experience_years: professionalInfo.experience_years,
-          qualification: professionalInfo.qualification,
-          about: professionalInfo.about,
-          consultation_fee: professionalInfo.consultation_fee
-        })
+        .select('id', { count: 'exact', head: true })
         .eq('id', user.id);
       
-      if (error) throw error;
+      let updateError = null;
       
-      if (doctorProfile && doctorProfile.doctor_profile) {
-        setDoctorProfile({
+      if (count && count > 0) {
+        const { error } = await supabase
+          .from('doctor_profiles')
+          .update({
+            specialty_id: professionalInfo.specialty_id,
+            experience_years: professionalInfo.experience_years,
+            qualification: professionalInfo.qualification,
+            about: professionalInfo.about,
+            consultation_fee: professionalInfo.consultation_fee
+          })
+          .eq('id', user.id);
+        
+        updateError = error;
+      } else {
+        const { error } = await supabase
+          .from('doctor_profiles')
+          .insert({
+            id: user.id,
+            specialty_id: professionalInfo.specialty_id,
+            experience_years: professionalInfo.experience_years,
+            qualification: professionalInfo.qualification,
+            about: professionalInfo.about,
+            consultation_fee: professionalInfo.consultation_fee,
+            available_days: [],
+            available_hours: {}
+          });
+        
+        updateError = error;
+      }
+      
+      if (updateError) throw updateError;
+      
+      const selectedSpecialty = specialties.find(s => s.id === professionalInfo.specialty_id);
+      
+      if (doctorProfile) {
+        const updatedProfile = {
           ...doctorProfile,
           doctor_profile: {
             ...doctorProfile.doctor_profile,
@@ -289,10 +346,20 @@ export default function DoctorProfile() {
             experience_years: professionalInfo.experience_years,
             qualification: professionalInfo.qualification,
             about: professionalInfo.about,
-            consultation_fee: professionalInfo.consultation_fee
-          },
-          specialty: specialties.find(s => s.id === professionalInfo.specialty_id) || doctorProfile.specialty
-        });
+            consultation_fee: professionalInfo.consultation_fee,
+            available_days: doctorProfile.doctor_profile?.available_days || [],
+            available_hours: doctorProfile.doctor_profile?.available_hours || {}
+          }
+        } as DoctorProfile;
+        
+        if (selectedSpecialty) {
+          updatedProfile.specialty = {
+            id: selectedSpecialty.id,
+            name: selectedSpecialty.name
+          };
+        }
+        
+        setDoctorProfile(updatedProfile);
       }
       
       toast({
@@ -332,15 +399,51 @@ export default function DoctorProfile() {
         .filter(slot => slot.slots.length > 0)
         .map(slot => slot.day);
       
-      const { error } = await supabase
+      const { count } = await supabase
         .from('doctor_profiles')
-        .update({
-          available_hours: availableHours,
-          available_days: availableDays
-        })
+        .select('id', { count: 'exact', head: true })
         .eq('id', user.id);
       
-      if (error) throw error;
+      let updateError = null;
+      
+      if (count && count > 0) {
+        const { error } = await supabase
+          .from('doctor_profiles')
+          .update({
+            available_hours: availableHours,
+            available_days: availableDays
+          })
+          .eq('id', user.id);
+        
+        updateError = error;
+      } else {
+        const { error } = await supabase
+          .from('doctor_profiles')
+          .insert({
+            id: user.id,
+            available_hours: availableHours,
+            available_days: availableDays,
+            specialty_id: null,
+            experience_years: 0,
+            qualification: '',
+            consultation_fee: 0
+          });
+        
+        updateError = error;
+      }
+      
+      if (updateError) throw updateError;
+      
+      if (doctorProfile && doctorProfile.doctor_profile) {
+        setDoctorProfile({
+          ...doctorProfile,
+          doctor_profile: {
+            ...doctorProfile.doctor_profile,
+            available_hours: availableHours,
+            available_days: availableDays
+          }
+        });
+      }
       
       toast({
         title: "Availability Updated",
@@ -410,7 +513,7 @@ export default function DoctorProfile() {
           {user?.profilePic ? (
             <img
               src={user.profilePic}
-              alt={user.name}
+              alt={doctorProfile?.full_name}
               className="w-full h-full rounded-full object-cover"
             />
           ) : (
