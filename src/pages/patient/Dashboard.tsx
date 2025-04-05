@@ -8,8 +8,9 @@ import DoctorCard from "@/components/DoctorCard";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Appointment, Doctor } from "@/types";
+import { Appointment, Doctor, UserRole } from "@/types";
 import { format } from "date-fns";
+import { asUserRole } from "@/utils/typeHelpers";
 
 export default function PatientDashboard() {
   const navigate = useNavigate();
@@ -29,10 +30,11 @@ export default function PatientDashboard() {
           .select(`
             *,
             doctor:doctor_id (
-              *,
-              profile:id (
-                full_name
-              )
+              id,
+              full_name,
+              email,
+              phone,
+              role
             )
           `)
           .eq('patient_id', user.id)
@@ -41,7 +43,7 @@ export default function PatientDashboard() {
 
         if (appointmentsError) {
           console.error("Error fetching appointments:", appointmentsError);
-        } else {
+        } else if (appointmentsData) {
           // Transform data to match our Appointment interface
           const today = new Date();
           const formattedAppointments = appointmentsData
@@ -52,7 +54,7 @@ export default function PatientDashboard() {
               doctorId: appt.doctor_id,
               date: appt.appointment_date,
               time: appt.appointment_time,
-              status: appt.status,
+              status: (appt.status || 'pending') as "pending" | "confirmed" | "cancelled" | "completed",
               reason: appt.symptoms || ''
             }))
             .slice(0, 2); // Just get the first 2 upcoming appointments
@@ -72,15 +74,15 @@ export default function PatientDashboard() {
 
         if (doctorsError) {
           console.error("Error fetching doctors:", doctorsError);
-        } else {
+        } else if (doctorsData) {
           // Transform data to match our Doctor interface
           const formattedDoctors = doctorsData.map(doc => ({
             id: doc.id,
             name: doc.full_name,
             email: doc.email,
             phone: doc.phone || '',
-            role: 'doctor',
-            specialty: 'General Practitioner', // Default value
+            role: asUserRole(doc.role),
+            specialty: doc.doctor_profiles?.[0]?.specialty || 'General Practitioner', 
             experience: doc.doctor_profiles?.[0]?.experience_years || 5,
             rating: 4.8, // Default value
             profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png' // Default image
@@ -168,7 +170,8 @@ export default function PatientDashboard() {
                 id: appointment.doctorId,
                 name: "Dr. Smith",
                 email: "doctor@example.com",
-                role: "doctor",
+                phone: "",
+                role: "doctor" as UserRole,
                 specialty: "General Practitioner"
               }}
               onCancel={() => {

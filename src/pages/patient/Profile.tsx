@@ -20,8 +20,8 @@ export default function PatientProfile() {
     dateOfBirth: '',
     gender: '',
     bloodGroup: '',
-    allergies: [],
-    medicalConditions: []
+    allergies: [] as string[],
+    medicalConditions: [] as string[]
   });
   
   const [loading, setLoading] = useState(true);
@@ -33,29 +33,38 @@ export default function PatientProfile() {
       try {
         setLoading(true);
         
-        const { data, error } = await supabase
-          .from('patients')
+        // First fetch the basic profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
           .select('*')
           .eq('id', user.id)
           .single();
           
-        if (error && error.code !== 'PGRST116') {
-          // PGRST116 means no rows returned, which is fine for new users
-          console.error("Error fetching patient profile:", error);
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error("Error fetching profile:", profileError);
         }
         
-        if (data) {
-          setProfileData({
-            fullName: user.name || '',
-            email: user.email || '',
-            phone: user.phone || '',
-            dateOfBirth: data.date_of_birth || '',
-            gender: data.gender || '',
-            bloodGroup: data.blood_group || '',
-            allergies: data.allergies || [],
-            medicalConditions: data.medical_conditions || []
-          });
+        // Next fetch medical info
+        const { data: medicalData, error: medicalError } = await supabase
+          .from('patient_medical_info')
+          .select('*')
+          .eq('patient_id', user.id)
+          .single();
+          
+        if (medicalError && medicalError.code !== 'PGRST116') {
+          console.error("Error fetching patient medical info:", medicalError);
         }
+        
+        setProfileData({
+          fullName: user.name || profileData?.full_name || '',
+          email: user.email || profileData?.email || '',
+          phone: user.phone || profileData?.phone || '',
+          dateOfBirth: '',  // These fields might be in a separate table
+          gender: '',  
+          bloodGroup: medicalData?.blood_type || '',
+          allergies: medicalData?.allergies || [],
+          medicalConditions: medicalData?.chronic_conditions || []
+        });
       } catch (error) {
         console.error("Error:", error);
       } finally {

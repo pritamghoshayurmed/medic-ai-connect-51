@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import AppointmentCard from "@/components/AppointmentCard";
 import BottomNavigation from "@/components/BottomNavigation";
-import { Appointment, Doctor } from "@/types";
+import { Appointment, Doctor, UserRole } from "@/types";
+import { asUserRole } from "@/utils/typeHelpers";
 
 export default function Appointments() {
   const navigate = useNavigate();
@@ -35,16 +35,23 @@ export default function Appointments() {
         const { data, error } = await supabase
           .from('appointments')
           .select(`
-            *,
-            doctor:doctor_id (
+            id,
+            patient_id,
+            doctor_id,
+            appointment_date,
+            appointment_time,
+            status,
+            symptoms,
+            profiles:doctor_id (
               id,
               full_name,
               email,
               phone,
-              doctor_profiles (
-                specialty,
-                experience_years
-              )
+              role
+            ),
+            doctor_profiles:doctor_id (
+              specialty,
+              experience_years
             )
           `)
           .eq('patient_id', user.id)
@@ -55,32 +62,36 @@ export default function Appointments() {
           throw error;
         }
         
-        // Transform data to our interface
-        const formattedAppointments = data.map(appt => {
-          const doctor = appt.doctor ? {
-            id: appt.doctor.id,
-            name: appt.doctor.full_name || '',
-            email: appt.doctor.email || '',
-            phone: appt.doctor.phone || '',
-            role: 'doctor' as const,
-            specialty: appt.doctor.doctor_profiles?.[0]?.specialty || 'General Practitioner',
-            experience: appt.doctor.doctor_profiles?.[0]?.experience_years || 0,
-            profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png',
-          } : undefined;
-          
-          return {
-            id: appt.id,
-            patientId: appt.patient_id,
-            doctorId: appt.doctor_id,
-            date: appt.appointment_date,
-            time: appt.appointment_time,
-            status: appt.status || 'pending',
-            reason: appt.symptoms || '',
-            doctor
-          };
-        });
+        if (data) {
+          const formattedAppointments = data.map(appt => {
+            const doctorProfile = appt.profiles || {};
+            const doctorSpecialty = appt.doctor_profiles?.[0] || {};
+            
+            const doctor = {
+              id: doctorProfile.id || appt.doctor_id,
+              name: doctorProfile.full_name || 'Unknown Doctor',
+              email: doctorProfile.email || '',
+              phone: doctorProfile.phone || '',
+              role: 'doctor' as UserRole,
+              specialty: doctorSpecialty.specialty || 'General Practitioner',
+              experience: doctorSpecialty.experience_years || 0,
+              profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png',
+            };
+            
+            return {
+              id: appt.id,
+              patientId: appt.patient_id,
+              doctorId: appt.doctor_id,
+              date: appt.appointment_date,
+              time: appt.appointment_time,
+              status: (appt.status || 'pending') as "pending" | "confirmed" | "cancelled" | "completed",
+              reason: appt.symptoms || '',
+              doctor
+            };
+          });
         
-        setAppointments(formattedAppointments);
+          setAppointments(formattedAppointments);
+        }
       } catch (error) {
         console.error("Error:", error);
       } finally {
@@ -137,7 +148,6 @@ export default function Appointments() {
         
       if (error) throw error;
       
-      // Update local state
       setAppointments(prev => prev.map(appt => 
         appt.id === selectedAppointment 
           ? { ...appt, status: 'cancelled' } 
@@ -149,7 +159,6 @@ export default function Appointments() {
         description: "Your appointment has been successfully cancelled",
       });
       
-      // Close dialog
       setCancelDialogOpen(false);
       setCancelReason("");
       setSelectedAppointment(null);
@@ -168,7 +177,6 @@ export default function Appointments() {
 
   return (
     <div className="pb-24">
-      {/* Header */}
       <div className="bg-white shadow p-4 flex items-center">
         <Button variant="ghost" size="icon" className="mr-2" onClick={() => navigate(-1)}>
           <ChevronLeft />
@@ -176,7 +184,6 @@ export default function Appointments() {
         <h1 className="text-xl font-bold">My Appointments</h1>
       </div>
       
-      {/* Tabs */}
       <div className="p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid grid-cols-3 w-full">
@@ -199,7 +206,6 @@ export default function Appointments() {
         </Tabs>
       </div>
       
-      {/* Cancellation Dialog */}
       <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
         <DialogContent>
           <DialogHeader>

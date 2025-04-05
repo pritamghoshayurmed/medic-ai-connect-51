@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,7 +52,7 @@ export default function DoctorAppointments() {
             doctorId: appt.doctor_id,
             date: appt.appointment_date,
             time: appt.appointment_time,
-            status: appt.status,
+            status: (appt.status || 'pending') as "pending" | "confirmed" | "cancelled" | "completed",
             reason: appt.symptoms || '',
             patient: {
               id: appt.patient.id,
