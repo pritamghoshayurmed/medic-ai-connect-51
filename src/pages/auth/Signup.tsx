@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -73,6 +72,7 @@ export default function Signup() {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
+              autoComplete="name"
             />
           </div>
           <div>
@@ -84,6 +84,7 @@ export default function Signup() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
+              autoComplete="email"
             />
           </div>
           <div>
@@ -95,6 +96,7 @@ export default function Signup() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               required
+              autoComplete="tel"
             />
           </div>
           <div>
@@ -106,6 +108,7 @@ export default function Signup() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
+              autoComplete="new-password"
             />
           </div>
           <div>
@@ -117,6 +120,7 @@ export default function Signup() {
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
+              autoComplete="new-password"
             />
           </div>
           <div className="pt-4">
