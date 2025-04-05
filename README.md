@@ -1,73 +1,112 @@
-# Welcome to your Lovable project
+# Medic AI Connect
 
-## Project info
+A modern healthcare platform connecting patients and doctors with AI-powered tools for diagnosis, appointment management, and communication.
 
-**URL**: https://lovable.dev/projects/bbb617e6-44a2-446d-8ea2-6778b06878b9
+## Features
 
-## How can I edit this code?
+- **Patient Dashboard:** Manage appointments, chat with doctors, set medication reminders
+- **Doctor Dashboard:** View patient appointments, analytics, and use the AI diagnosis engine
+- **AI Diagnosis Engine:** Analyze medical images using Google's Gemini API
+- **Medical QA System:** Ask questions about medical reports and conditions
+- **Appointment Management:** Schedule and manage appointments between patients and doctors
+- **Secure Messaging:** Real-time chat between patients and healthcare providers
 
-There are several ways of editing your application.
+## Doctor AI Functionality
 
-**Use Lovable**
+The platform integrates advanced Doctor AI capabilities including:
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/bbb617e6-44a2-446d-8ea2-6778b06878b9) and start prompting.
+- **Medical Image Analysis:** Upload and analyze X-rays, CT scans, MRIs, and other medical images
+- **Diagnostic Insights:** Get AI-powered analysis of medical images with severity assessment
+- **Medical Report Generation:** Generate detailed reports from analysis results
+- **QA System:** Ask questions about medical conditions and get AI-powered responses
+- **Collaboration Tools:** Discuss analysis results with AI assistant
 
-Changes made via Lovable will be committed automatically to this repo.
+## Tech Stack
 
-**Use your preferred IDE**
+- **Frontend:** React 18, TypeScript, Tailwind CSS, Shadcn UI
+- **Database:** Supabase
+- **AI:** Google Gemini API (gemini-2.0-flash-lite model)
+- **State Management:** React Context API, React Query
+- **Authentication:** Supabase Auth
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## Getting Started
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+### Prerequisites
 
-Follow these steps:
+- Node.js 16+
+- npm or yarn
+- Supabase account (optional for full functionality)
+- Google Gemini API key is already hardcoded for demo purposes
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+### Environment Setup
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+1. Clone the repository
+2. The app is preconfigured with a Gemini API key, so you don't need to set it up for testing the AI functionality
+3. If you want to use your own API key, you can update it in the `.env.local` file:
+   ```
+   VITE_SUPABASE_URL=your-supabase-url
+   VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+   VITE_GEMINI_API_KEY=your-gemini-api-key
+   VITE_OPENAI_API_KEY=your-openai-api-key
+   ```
 
-# Step 3: Install the necessary dependencies.
-npm i
+### Installation
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+```bash
+# Install dependencies
+npm install
+
+# Start development server
 npm run dev
+
+# Build for production
+npm run build
 ```
 
-**Edit a file directly in GitHub**
+The app will be available at http://localhost:8081
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Gemini API Implementation
 
-**Use GitHub Codespaces**
+This application uses the Gemini 2.0 Flash Lite model for AI functionality. The API is called directly using axios:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```typescript
+// Example direct API call to Gemini
+const response = await axios.post(
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+  {
+    contents: [{
+      parts: [{ text: prompt }]
+    }]
+  },
+  {
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  }
+);
+```
 
-## What technologies are used for this project?
+## Project Structure
 
-This project is built with:
+```
+src/
+├── components/      # Reusable UI components
+├── contexts/        # React context providers
+├── hooks/           # Custom React hooks
+├── lib/             # Utility libraries
+├── pages/           # Page components
+├── services/        # API service functions
+├── types/           # TypeScript types
+└── utils/           # Helper functions
+```
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Doctor AI Components
 
-## How can I deploy this project?
+- `ImageUploader`: Drag-and-drop medical image upload component
+- `AnalysisResults`: Displays medical image analysis with findings and recommendations
+- `MedicalQAChat`: Interactive chat interface for medical questions
+- `doctorAiService`: Service for handling image analysis and medical QA
 
-Simply open [Lovable](https://lovable.dev/projects/bbb617e6-44a2-446d-8ea2-6778b06878b9) and click on Share -> Publish.
+## License
 
-## Can I connect a custom domain to my Lovable project?
-
-Yes it is!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+MIT

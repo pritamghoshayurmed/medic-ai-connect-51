@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -173,6 +172,7 @@ export default function Chat() {
   };
 
   const goBack = () => {
+    // Updated paths to match the format in App.tsx
     const path = user?.role === 'doctor' ? '/doctor/chat-rooms' : '/patient';
     navigate(path);
   };
