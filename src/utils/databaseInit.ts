@@ -1,9 +1,30 @@
-
 import { supabase } from "@/integrations/supabase/client";
 
+// Global flag to track initialization within current JS execution context
+let isInitialized = false;
+
+// Session storage key for tracking initialization across page refreshes
+const SESSION_INITIALIZED_KEY = 'db_initialized_timestamp';
+
 export async function initializeDatabase() {
+  // Return immediately if already initialized in this JS context
+  if (isInitialized) {
+    return;
+  }
+  
+  // Check if initialized in this browser session within the last 5 minutes
+  // This prevents repeated initializations while allowing periodic refreshes
+  const lastInitTime = sessionStorage.getItem(SESSION_INITIALIZED_KEY);
+  const now = Date.now();
+  if (lastInitTime && (now - Number(lastInitTime)) < 300000) { // 5 minutes
+    console.log("Database already initialized recently, skipping initialization");
+    isInitialized = true;
+    return;
+  }
+  
   try {
     console.log("Initializing database...");
+    isInitialized = true;
     
     // Create profiles table if it doesn't exist
     const { error: profilesError } = await supabase
@@ -61,8 +82,12 @@ export async function initializeDatabase() {
     
     console.log("Database initialization complete.");
     
+    // Mark as initialized in sessionStorage with current timestamp
+    sessionStorage.setItem(SESSION_INITIALIZED_KEY, now.toString());
+    
   } catch (error) {
     console.error("Error initializing database:", error);
+    isInitialized = false; // Reset flag on error
   }
 }
 
