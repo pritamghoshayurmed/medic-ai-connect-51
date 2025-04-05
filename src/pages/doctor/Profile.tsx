@@ -60,9 +60,7 @@ interface DoctorProfile {
     about: string;
     consultation_fee: number;
     available_days: string[];
-    available_hours: {
-      [key: string]: string[];
-    };
+    available_hours: any;
   };
   specialty?: {
     id: string;
@@ -81,13 +79,11 @@ export default function DoctorProfile() {
   const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
   const [specialties, setSpecialties] = useState<{id: string, name: string}[]>([]);
   
-  // Edit dialogs state
   const [personalInfoDialog, setPersonalInfoDialog] = useState(false);
   const [professionalInfoDialog, setProfessionalInfoDialog] = useState(false);
   const [availabilityDialog, setAvailabilityDialog] = useState(false);
   const [editAvailabilityDay, setEditAvailabilityDay] = useState<string | null>(null);
   
-  // Form states
   const [personalInfo, setPersonalInfo] = useState({
     full_name: '',
     email: '',
@@ -112,7 +108,6 @@ export default function DoctorProfile() {
     { day: "Sunday", slots: [] },
   ]);
   
-  // Dialog state for editing specific day
   const [daySlots, setDaySlots] = useState<string[]>([]);
   const [newSlot, setNewSlot] = useState('');
   
@@ -122,7 +117,6 @@ export default function DoctorProfile() {
     const fetchDoctorProfile = async () => {
       setLoading(true);
       try {
-        // Fetch basic profile info
         const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select('*')
@@ -131,7 +125,6 @@ export default function DoctorProfile() {
         
         if (profileError) throw profileError;
         
-        // Fetch doctor profile details
         const { data: doctorData, error: doctorError } = await supabase
           .from('doctor_profiles')
           .select('*')
@@ -140,7 +133,6 @@ export default function DoctorProfile() {
         
         if (doctorError) throw doctorError;
         
-        // Fetch specialty info if available
         let specialtyInfo = null;
         if (doctorData.specialty_id) {
           const { data: specialtyData, error: specialtyError } = await supabase
@@ -154,7 +146,6 @@ export default function DoctorProfile() {
           }
         }
         
-        // Combine all data
         const doctorProfileData: DoctorProfile = {
           id: profileData.id,
           full_name: profileData.full_name,
@@ -181,7 +172,6 @@ export default function DoctorProfile() {
         
         setDoctorProfile(doctorProfileData);
         
-        // Set form states
         setPersonalInfo({
           full_name: profileData.full_name,
           email: profileData.email,
@@ -196,7 +186,6 @@ export default function DoctorProfile() {
           consultation_fee: doctorData.consultation_fee || 0
         });
         
-        // Set availability slots
         if (doctorData.available_hours) {
           const hours = doctorData.available_hours as Record<string, string[]>;
           
@@ -210,14 +199,12 @@ export default function DoctorProfile() {
           setAvailabilitySlots(updatedSlots);
         }
         
-        // Fetch specialties for dropdown
         const { data: specialtiesData, error: specialtiesError } = await supabase
           .from('specialties')
           .select('*');
         
         if (specialtiesError) throw specialtiesError;
         setSpecialties(specialtiesData);
-        
       } catch (error) {
         console.error("Error fetching doctor profile:", error);
         toast({
@@ -252,7 +239,6 @@ export default function DoctorProfile() {
       
       if (error) throw error;
       
-      // Update local state
       if (doctorProfile) {
         setDoctorProfile({
           ...doctorProfile,
@@ -294,7 +280,6 @@ export default function DoctorProfile() {
       
       if (error) throw error;
       
-      // Update local state
       if (doctorProfile && doctorProfile.doctor_profile) {
         setDoctorProfile({
           ...doctorProfile,
@@ -330,7 +315,6 @@ export default function DoctorProfile() {
     if (!user || !editAvailabilityDay) return;
     
     try {
-      // Update the local state first
       const updatedSlots = availabilitySlots.map(slot => 
         slot.day === editAvailabilityDay 
           ? { ...slot, slots: daySlots } 
@@ -339,18 +323,15 @@ export default function DoctorProfile() {
       
       setAvailabilitySlots(updatedSlots);
       
-      // Convert to format for database
       const availableHours: Record<string, string[]> = {};
       updatedSlots.forEach(slot => {
         availableHours[slot.day] = slot.slots;
       });
       
-      // Get available days (days with at least one slot)
       const availableDays = updatedSlots
         .filter(slot => slot.slots.length > 0)
         .map(slot => slot.day);
       
-      // Update database
       const { error } = await supabase
         .from('doctor_profiles')
         .update({
@@ -380,7 +361,6 @@ export default function DoctorProfile() {
   const addTimeSlot = () => {
     if (!newSlot) return;
     
-    // Check if slot already exists
     if (daySlots.includes(newSlot)) {
       toast({
         title: "Duplicate Slot",
@@ -399,7 +379,6 @@ export default function DoctorProfile() {
   };
   
   const handleEditDay = (day: string) => {
-    // Find the slots for this day
     const dayData = availabilitySlots.find(slot => slot.day === day);
     if (dayData) {
       setDaySlots(dayData.slots);
@@ -419,7 +398,6 @@ export default function DoctorProfile() {
 
   return (
     <div className="pb-24">
-      {/* Header */}
       <div className="bg-primary text-white p-4 flex items-center">
         <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
           <ChevronLeft />
@@ -427,7 +405,6 @@ export default function DoctorProfile() {
         <h1 className="text-xl font-bold">Profile</h1>
       </div>
 
-      {/* Profile Info */}
       <div className="flex items-center p-6">
         <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center mr-4">
           {user?.profilePic ? (
@@ -449,7 +426,6 @@ export default function DoctorProfile() {
 
       <Separator />
 
-      {/* Tabs for settings */}
       <Tabs defaultValue="availability" className="w-full p-4">
         <TabsList className="grid grid-cols-3 w-full mb-4">
           <TabsTrigger value="availability">Availability</TabsTrigger>
@@ -457,7 +433,6 @@ export default function DoctorProfile() {
           <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
         
-        {/* Availability Tab */}
         <TabsContent value="availability">
           <div className="space-y-4">
             <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -530,7 +505,6 @@ export default function DoctorProfile() {
           </div>
         </TabsContent>
         
-        {/* Profile Tab */}
         <TabsContent value="profile">
           <div className="space-y-4">
             <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -597,7 +571,6 @@ export default function DoctorProfile() {
           </div>
         </TabsContent>
         
-        {/* Settings Tab */}
         <TabsContent value="settings">
           <div className="space-y-4">
             <div className="bg-white rounded-lg p-4 shadow-sm">
@@ -656,7 +629,6 @@ export default function DoctorProfile() {
         </TabsContent>
       </Tabs>
       
-      {/* Logout button */}
       <div className="p-4">
         <Button 
           variant="destructive" 
@@ -667,7 +639,6 @@ export default function DoctorProfile() {
         </Button>
       </div>
 
-      {/* Edit Personal Info Dialog */}
       <Dialog open={personalInfoDialog} onOpenChange={setPersonalInfoDialog}>
         <DialogContent>
           <DialogHeader>
@@ -718,7 +689,6 @@ export default function DoctorProfile() {
         </DialogContent>
       </Dialog>
       
-      {/* Edit Professional Info Dialog */}
       <Dialog open={professionalInfoDialog} onOpenChange={setProfessionalInfoDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -815,7 +785,6 @@ export default function DoctorProfile() {
         </DialogContent>
       </Dialog>
       
-      {/* Edit Availability Dialog */}
       <Dialog open={editAvailabilityDay !== null} onOpenChange={(open) => !open && setEditAvailabilityDay(null)}>
         <DialogContent>
           <DialogHeader>

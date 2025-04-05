@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ export default function DoctorChatRooms() {
     const fetchChats = async () => {
       setLoading(true);
       try {
-        // Fetch messages with sender/receiver information
+        // Fetch messages between users, with proper column selection and hints
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select(`
@@ -78,12 +79,12 @@ export default function DoctorChatRooms() {
           
           if (msg.sender_id === user.id) {
             otherUserId = msg.receiver_id;
-            otherUserName = msg.receiver.full_name;
-            otherUserRole = msg.receiver.role;
+            otherUserName = msg.receiver?.full_name || '';
+            otherUserRole = msg.receiver?.role || '';
           } else {
             otherUserId = msg.sender_id;
-            otherUserName = msg.sender.full_name;
-            otherUserRole = msg.sender.role;
+            otherUserName = msg.sender?.full_name || '';
+            otherUserRole = msg.sender?.role || '';
             // Count unread messages
             if (!msg.read) {
               const existing = messagesByUser.get(otherUserId);
@@ -133,14 +134,15 @@ export default function DoctorChatRooms() {
         setPatientChats(patientChatsList);
         setDoctorChats(doctorChatsList);
 
-        // Fetch available doctors for creating new chats
+        // Fetch available doctors for creating new chats without specialty_id relation
         const { data: doctorsData, error: doctorsError } = await supabase
           .from('profiles')
           .select(`
             id,
             full_name,
-            doctor_profiles(specialty_id),
-            specialties(name)
+            doctor_profiles (
+              experience_years
+            )
           `)
           .eq('role', 'doctor')
           .neq('id', user.id);
@@ -150,7 +152,7 @@ export default function DoctorChatRooms() {
         const formattedDoctors = doctorsData.map((doc: any) => ({
           id: doc.id,
           name: doc.full_name,
-          specialty: doc.specialties?.name || 'General Practitioner'
+          specialty: 'General Practitioner'
         }));
 
         setAvailableDoctors(formattedDoctors);

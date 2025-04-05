@@ -22,64 +22,90 @@ export default function Appointments() {
     const fetchAppointments = async () => {
       setLoading(true);
       try {
-        const { data, error } = await supabase
+        // First fetch appointment data
+        const { data: appointmentsData, error: appointmentsError } = await supabase
           .from('appointments')
           .select(`
-            *,
-            doctor:profiles!doctor_id (
-              id,
-              full_name,
-              email,
-              phone,
-              role,
-              doctor_profiles (
-                specialty_id,
-                experience_years,
-                qualification,
-                rating
-              )
-            )
+            id,
+            patient_id,
+            doctor_id,
+            appointment_date,
+            appointment_time,
+            status,
+            symptoms
           `)
           .eq('patient_id', user.id);
 
-        if (error) {
-          console.error('Error fetching appointments:', error);
+        if (appointmentsError) {
+          console.error('Error fetching appointments:', appointmentsError);
           return;
         }
 
-        if (data) {
-          console.log("Appointment data:", data);
-          // Transform data to match our interface
-          const formattedAppointments = data.map(appt => {
-            // Create doctor object from fetched data
-            const doctorData = appt.doctor || {};
-            const doctor = toDoctorType({
-              id: doctorData.id,
-              name: doctorData.full_name,
-              email: doctorData.email,
-              phone: doctorData.phone || '',
-              role: 'doctor',
-              specialty: '', // We don't have this in the query
-              experience: doctorData.doctor_profiles?.experience_years || 0,
-              education: doctorData.doctor_profiles?.qualification || '',
-              rating: doctorData.doctor_profiles?.rating || 0,
-              profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
-            });
+        if (!appointmentsData || appointmentsData.length === 0) {
+          setAppointments([]);
+          return;
+        }
 
-            return toAppointmentWithDoctor({
-              id: appt.id,
-              patientId: appt.patient_id,
-              doctorId: appt.doctor_id,
-              date: appt.appointment_date,
-              time: appt.appointment_time,
-              status: appt.status,
-              reason: appt.symptoms || '',
-              doctor
-            });
+        // Fetch all doctors involved in appointments
+        const doctorIds = [...new Set(appointmentsData.map(appt => appt.doctor_id))];
+        const { data: doctorsData, error: doctorsError } = await supabase
+          .from('profiles')
+          .select(`
+            id,
+            full_name,
+            email,
+            phone,
+            role,
+            doctor_profiles (
+              specialty_id,
+              experience_years,
+              qualification,
+              rating
+            )
+          `)
+          .in('id', doctorIds);
+
+        if (doctorsError) {
+          console.error('Error fetching doctors:', doctorsError);
+          return;
+        }
+
+        // Create a map of doctor data by ID for faster lookup
+        const doctorsMap = new Map();
+        doctorsData.forEach(doc => {
+          doctorsMap.set(doc.id, doc);
+        });
+
+        // Merge appointment data with doctor data
+        const formattedAppointments = appointmentsData.map(appt => {
+          const doctorData = doctorsMap.get(appt.doctor_id) || {};
+          
+          const doctor = toDoctorType({
+            id: doctorData.id || '',
+            name: doctorData.full_name || '',
+            email: doctorData.email || '',
+            phone: doctorData.phone || '',
+            role: 'doctor',
+            experience: doctorData.doctor_profiles?.experience_years || 0,
+            education: doctorData.doctor_profiles?.qualification || '',
+            rating: doctorData.doctor_profiles?.rating || 0,
+            profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
           });
 
-          setAppointments(formattedAppointments);
-        }
+          return {
+            id: appt.id,
+            patientId: appt.patient_id,
+            doctorId: appt.doctor_id,
+            date: appt.appointment_date,
+            time: appt.appointment_time,
+            status: appt.status,
+            reason: appt.symptoms || '',
+            notes: '',
+            doctor
+          };
+        });
+
+        setAppointments(formattedAppointments);
       } catch (err) {
         console.error('Error:', err);
       } finally {

@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -31,6 +32,7 @@ interface PatientProfile {
   name: string;
   email: string;
   phone: string;
+  role: string;
   medical_info?: {
     blood_type: string;
     allergies: string[];
@@ -44,7 +46,13 @@ export default function PatientProfile() {
   const { toast } = useToast();
   
   const [loading, setLoading] = useState(true);
-  const [patientProfile, setPatientProfile] = useState<PatientProfile | null>(null);
+  const [patientProfile, setPatientProfile] = useState<PatientProfile>({
+    id: '',
+    name: '',
+    email: '',
+    phone: '',
+    role: 'patient'
+  });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [reminderAlerts, setReminderAlerts] = useState(true);
   const [appointmentReminders, setAppointmentReminders] = useState(true);
@@ -77,53 +85,61 @@ export default function PatientProfile() {
       setLoading(true);
       try {
         // Fetch patient profile
-        const { data, error } = await supabase
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
           .select(`
             id,
             full_name,
             email,
             phone,
-            patient_profiles (
-              blood_type,
-              allergies,
-              chronic_conditions
-            )
+            role
           `)
           .eq('id', user.id)
           .single();
         
-        if (error) throw error;
+        if (profileError) throw profileError;
         
         // Set patient profile
-        const profileData: PatientProfile = {
-          id: data.id,
-          full_name: data.full_name,
-          email: data.email,
-          phone: data.phone || ''
+        const patientData: PatientProfile = {
+          id: profileData.id,
+          name: profileData.full_name,
+          email: profileData.email,
+          phone: profileData.phone || '',
+          role: profileData.role
         };
         
-        if (data.patient_profiles) {
-          profileData.medical_info = {
-            blood_type: data.patient_profiles.blood_type || '',
-            allergies: data.patient_profiles.allergies || [],
-            chronic_conditions: data.patient_profiles.chronic_conditions || []
+        // Separately fetch patient_profiles data
+        const { data: medicalData, error: medicalError } = await supabase
+          .from('patient_profiles')
+          .select(`
+            blood_type,
+            allergies,
+            chronic_conditions
+          `)
+          .eq('id', user.id)
+          .single();
+        
+        if (!medicalError && medicalData) {
+          patientData.medical_info = {
+            blood_type: medicalData.blood_type || '',
+            allergies: medicalData.allergies || [],
+            chronic_conditions: medicalData.chronic_conditions || []
           };
         }
         
-        setPatientProfile(profileData);
+        setPatientProfile(patientData);
         
         // Set form states
         setPersonalInfo({
-          full_name: data.full_name,
-          phone: data.phone || ''
+          full_name: profileData.full_name,
+          phone: profileData.phone || ''
         });
         
-        if (data.patient_profiles) {
+        if (!medicalError && medicalData) {
           setMedicalInfo({
-            blood_type: data.patient_profiles.blood_type || '',
-            allergies: (data.patient_profiles.allergies || []).join(', '),
-            chronic_conditions: (data.patient_profiles.chronic_conditions || []).join(', ')
+            blood_type: medicalData.blood_type || '',
+            allergies: (medicalData.allergies || []).join(', '),
+            chronic_conditions: (medicalData.chronic_conditions || []).join(', ')
           });
         }
         
@@ -162,13 +178,11 @@ export default function PatientProfile() {
       if (error) throw error;
       
       // Update local state
-      if (patientProfile) {
-        setPatientProfile({
-          ...patientProfile,
-          full_name: personalInfo.full_name,
-          phone: personalInfo.phone
-        });
-      }
+      setPatientProfile({
+        ...patientProfile,
+        name: personalInfo.full_name,
+        phone: personalInfo.phone
+      });
       
       toast({
         title: "Profile Updated",
@@ -212,7 +226,7 @@ export default function PatientProfile() {
       let updateError;
       
       if (data && data.length > 0) {
-        // Update existing profile
+        // Update existing profile using direct table access
         const { error } = await supabase
           .from('patient_profiles')
           .update({
@@ -224,7 +238,7 @@ export default function PatientProfile() {
         
         updateError = error;
       } else {
-        // Create new profile
+        // Create new profile using direct table access
         const { error } = await supabase
           .from('patient_profiles')
           .insert({
@@ -240,16 +254,14 @@ export default function PatientProfile() {
       if (updateError) throw updateError;
       
       // Update local state
-      if (patientProfile) {
-        setPatientProfile({
-          ...patientProfile,
-          medical_info: {
-            blood_type: medicalInfo.blood_type,
-            allergies: allergiesArray,
-            chronic_conditions: conditionsArray
-          }
-        });
-      }
+      setPatientProfile({
+        ...patientProfile,
+        medical_info: {
+          blood_type: medicalInfo.blood_type,
+          allergies: allergiesArray,
+          chronic_conditions: conditionsArray
+        }
+      });
       
       toast({
         title: "Medical Info Updated",

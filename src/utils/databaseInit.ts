@@ -20,9 +20,8 @@ export async function initializeDatabase() {
     // We'll try a simple query to verify connection first
     const { error: connectionError } = await supabase
       .from('profiles')
-      .select('count', { count: 'exact' })
-      .limit(1)
-      .single();
+      .select('count')
+      .limit(1);
       
     if (connectionError) {
       if (connectionError.code === 'PGRST116') {

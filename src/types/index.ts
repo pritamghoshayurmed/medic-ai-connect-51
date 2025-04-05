@@ -1,4 +1,3 @@
-
 export type UserRole = 'patient' | 'doctor';
 
 export interface User {
@@ -20,6 +19,20 @@ export interface Patient extends User {
   medicalReports?: MedicalReport[];
 }
 
+export interface PatientProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: 'patient';
+  profilePic?: string;
+  medical_info?: {
+    blood_type: string;
+    allergies: string[];
+    chronic_conditions: string[];
+  };
+}
+
 export interface Doctor extends User {
   role: 'doctor';
   specialty?: string;
@@ -29,6 +42,29 @@ export interface Doctor extends User {
   availability?: Availability[];
   rating?: number;
   appointments?: Appointment[];
+}
+
+export interface DoctorProfile {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  role: string;
+  doctor_profiles: {
+    about?: string;
+    available_days?: string[];
+    available_hours?: Record<string, any>;
+    consultation_fee?: number;
+    experience_years?: number;
+    qualification?: string;
+    rating?: number;
+    total_reviews?: number;
+    specialty_id?: string;
+  };
+  specialties?: {
+    id: string;
+    name: string;
+  };
 }
 
 export interface Medication {
@@ -84,28 +120,4 @@ export interface Availability {
   startTime: string;
   endTime: string;
   slotDuration: number; // in minutes
-}
-
-// Doctor profile as stored in the database
-export interface DoctorProfile {
-  id: string;
-  full_name: string;
-  email: string;
-  phone: string;
-  role: string;
-  doctor_profiles: {
-    about?: string;
-    available_days: string[];
-    available_hours: Record<string, any>;
-    consultation_fee: number;
-    experience_years: number;
-    qualification: string;
-    rating?: number;
-    total_reviews?: number;
-    specialty_id?: string;
-  };
-  specialties?: {
-    id: string;
-    name: string;
-  };
 }

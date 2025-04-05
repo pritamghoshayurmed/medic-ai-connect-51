@@ -1,5 +1,5 @@
 
-import { Doctor, Patient, Appointment, UserRole } from "@/types";
+import { Doctor, Patient, Appointment, UserRole, DoctorProfile } from "@/types";
 
 /**
  * Helper function to convert a string to a valid UserRole type
@@ -52,6 +52,43 @@ export function toDoctorArray(doctorProfilesData: any[]): Doctor[] {
   if (!Array.isArray(doctorProfilesData)) return [];
   
   return doctorProfilesData.map(doctor => toDoctorType(doctor));
+}
+
+/**
+ * Helper to convert doctor profiles from database format to app format
+ */
+export function processDoctorProfile(profileData: any): Doctor {
+  // Handle potential Supabase query error or null data
+  if (!profileData || profileData.error || !profileData.id) {
+    return {
+      id: '',
+      name: '',
+      email: '',
+      phone: '',
+      role: 'doctor',
+      specialty: '',
+      experience: 0,
+      education: '',
+      hospital: '',
+      rating: 0,
+      profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+    };
+  }
+
+  return {
+    id: profileData.id,
+    name: profileData.full_name || '',
+    email: profileData.email || '',
+    phone: profileData.phone || '',
+    role: 'doctor',
+    specialty: profileData.specialties?.name || 
+              (profileData.doctor_profiles?.specialty_id ? 'Specialist' : 'General Practitioner'),
+    experience: profileData.doctor_profiles?.experience_years || 0,
+    education: profileData.doctor_profiles?.qualification || '',
+    hospital: '',
+    rating: profileData.doctor_profiles?.rating || 0,
+    profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+  };
 }
 
 /**

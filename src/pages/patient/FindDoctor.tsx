@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Doctor } from "@/types";
-import { toDoctorType } from "@/utils/typeHelpers";
+import { processDoctorProfile } from "@/utils/typeHelpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Search } from "lucide-react";
+import { Search, ChevronLeft } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 
 export default function FindDoctor() {
@@ -39,9 +39,6 @@ export default function FindDoctor() {
             experience_years,
             qualification,
             rating
-          ),
-          specialties:doctor_profiles.specialty_id (
-            name
           )
         `)
         .eq('role', 'doctor');
@@ -49,18 +46,7 @@ export default function FindDoctor() {
       if (error) throw error;
 
       // Convert to Doctor type using helper function
-      const doctorList = data.map(doc => toDoctorType({
-        id: doc.id,
-        name: doc.full_name,
-        email: doc.email,
-        phone: doc.phone || '',
-        role: 'doctor',
-        specialty: doc.specialties?.name || 'General',
-        experience: doc.doctor_profiles?.experience_years || 0,
-        education: doc.doctor_profiles?.qualification || '',
-        rating: doc.doctor_profiles?.rating || 0
-      }));
-
+      const doctorList = data.map(doc => processDoctorProfile(doc));
       setDoctors(doctorList);
       setFilteredDoctors(doctorList);
     } catch (error) {
