@@ -1,8 +1,9 @@
+
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Appointment, Doctor } from "@/types";
-import { toAppointmentWithDoctor } from "@/utils/typeHelpers";
+import { toAppointmentWithDoctor, toDoctorType } from "@/utils/typeHelpers";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,14 +26,14 @@ export default function Appointments() {
           .from('appointments')
           .select(`
             *,
-            doctor:doctor_id (
+            doctor:profiles!doctor_id (
               id,
               full_name,
               email,
               phone,
               role,
               doctor_profiles (
-                about,
+                specialty_id,
                 experience_years,
                 qualification,
                 rating
@@ -50,17 +51,20 @@ export default function Appointments() {
           console.log("Appointment data:", data);
           // Transform data to match our interface
           const formattedAppointments = data.map(appt => {
-            const doctor = {
-              id: appt.doctor.id,
-              name: appt.doctor.full_name,
-              email: appt.doctor.email,
-              phone: appt.doctor.phone || '',
-              role: 'doctor' as const,
+            // Create doctor object from fetched data
+            const doctorData = appt.doctor || {};
+            const doctor = toDoctorType({
+              id: doctorData.id,
+              name: doctorData.full_name,
+              email: doctorData.email,
+              phone: doctorData.phone || '',
+              role: 'doctor',
               specialty: '', // We don't have this in the query
-              experience: appt.doctor.doctor_profiles?.experience_years || 0,
-              rating: appt.doctor.doctor_profiles?.rating || 0,
+              experience: doctorData.doctor_profiles?.experience_years || 0,
+              education: doctorData.doctor_profiles?.qualification || '',
+              rating: doctorData.doctor_profiles?.rating || 0,
               profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
-            };
+            });
 
             return toAppointmentWithDoctor({
               id: appt.id,

@@ -41,7 +41,7 @@ export default function DoctorChatRooms() {
     const fetchChats = async () => {
       setLoading(true);
       try {
-        // 1. Fetch all messages where current doctor is either sender or receiver
+        // Fetch messages with sender/receiver information
         const { data: messagesData, error: messagesError } = await supabase
           .from('messages')
           .select(`
@@ -51,15 +51,15 @@ export default function DoctorChatRooms() {
             content,
             timestamp,
             read,
-            profiles!sender_id(id, full_name, role),
-            profiles!receiver_id(id, full_name, role)
+            sender:sender_id(id, full_name, role),
+            receiver:receiver_id(id, full_name, role)
           `)
           .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
           .order('timestamp', { ascending: false });
 
         if (messagesError) throw messagesError;
 
-        // 2. Process messages to create chat rooms
+        // Process messages to create chat rooms
         const messagesByUser = new Map<string, {
           userId: string,
           userName: string,
@@ -78,12 +78,12 @@ export default function DoctorChatRooms() {
           
           if (msg.sender_id === user.id) {
             otherUserId = msg.receiver_id;
-            otherUserName = msg.profiles.receiver_id.full_name;
-            otherUserRole = msg.profiles.receiver_id.role;
+            otherUserName = msg.receiver.full_name;
+            otherUserRole = msg.receiver.role;
           } else {
             otherUserId = msg.sender_id;
-            otherUserName = msg.profiles.sender_id.full_name;
-            otherUserRole = msg.profiles.sender_id.role;
+            otherUserName = msg.sender.full_name;
+            otherUserRole = msg.sender.role;
             // Count unread messages
             if (!msg.read) {
               const existing = messagesByUser.get(otherUserId);
@@ -108,7 +108,7 @@ export default function DoctorChatRooms() {
           }
         });
 
-        // 3. Convert to ChatRoom objects and separate by role
+        // Convert to ChatRoom objects and separate by role
         const patientChatsList: ChatRoom[] = [];
         const doctorChatsList: ChatRoom[] = [];
 
@@ -133,25 +133,21 @@ export default function DoctorChatRooms() {
         setPatientChats(patientChatsList);
         setDoctorChats(doctorChatsList);
 
-        // 4. Fetch available doctors for creating new chats
+        // Fetch available doctors for creating new chats
         const { data: doctorsData, error: doctorsError } = await supabase
           .from('profiles')
           .select(`
             id,
             full_name,
-            doctor_profiles!inner(
-              specialty_id
-            ),
-            specialties:doctor_profiles.specialty_id(
-              name
-            )
+            doctor_profiles(specialty_id),
+            specialties(name)
           `)
           .eq('role', 'doctor')
           .neq('id', user.id);
 
         if (doctorsError) throw doctorsError;
 
-        const formattedDoctors = doctorsData.map(doc => ({
+        const formattedDoctors = doctorsData.map((doc: any) => ({
           id: doc.id,
           name: doc.full_name,
           specialty: doc.specialties?.name || 'General Practitioner'

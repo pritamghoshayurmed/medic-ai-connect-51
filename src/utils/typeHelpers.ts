@@ -35,7 +35,7 @@ export function toDoctorType(doctorData: any): Doctor {
     name: doctorData.name || doctorData.full_name || '',
     email: doctorData.email || '',
     phone: doctorData.phone || '',
-    role: 'doctor', // Explicitly set as 'doctor' to satisfy TypeScript
+    role: 'doctor' as const, // Explicitly set as 'doctor' to satisfy TypeScript
     specialty: doctorData.specialty || '',
     experience: doctorData.experience || doctorData.experience_years || 0,
     education: doctorData.education || doctorData.qualification || '',
@@ -51,19 +51,7 @@ export function toDoctorType(doctorData: any): Doctor {
 export function toDoctorArray(doctorProfilesData: any[]): Doctor[] {
   if (!Array.isArray(doctorProfilesData)) return [];
   
-  return doctorProfilesData.map(doctor => ({
-    id: doctor.id || '',
-    name: doctor.name || doctor.full_name || '',
-    email: doctor.email || '',
-    phone: doctor.phone || '',
-    role: 'doctor' as const, // Using const assertion to ensure type is correct
-    specialty: doctor.specialty || '',
-    experience: doctor.experience || doctor.experience_years || 0,
-    education: doctor.education || doctor.qualification || '',
-    hospital: doctor.hospital || '',
-    rating: doctor.rating || 0,
-    profilePic: doctor.profilePic || '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
-  }));
+  return doctorProfilesData.map(doctor => toDoctorType(doctor));
 }
 
 /**

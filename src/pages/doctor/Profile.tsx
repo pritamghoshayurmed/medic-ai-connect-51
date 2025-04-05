@@ -122,65 +122,92 @@ export default function DoctorProfile() {
     const fetchDoctorProfile = async () => {
       setLoading(true);
       try {
-        // Fetch doctor profile with joined data
-        const { data, error } = await supabase
+        // Fetch basic profile info
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select(`
-            id,
-            full_name,
-            email,
-            phone,
-            role,
-            doctor_profiles (
-              specialty_id,
-              experience_years,
-              qualification,
-              about,
-              consultation_fee,
-              available_days,
-              available_hours
-            ),
-            specialties:doctor_profiles.specialty_id (
-              id,
-              name
-            )
-          `)
+          .select('*')
           .eq('id', user.id)
           .single();
         
-        if (error) throw error;
+        if (profileError) throw profileError;
         
-        setDoctorProfile(data);
+        // Fetch doctor profile details
+        const { data: doctorData, error: doctorError } = await supabase
+          .from('doctor_profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        if (doctorError) throw doctorError;
+        
+        // Fetch specialty info if available
+        let specialtyInfo = null;
+        if (doctorData.specialty_id) {
+          const { data: specialtyData, error: specialtyError } = await supabase
+            .from('specialties')
+            .select('*')
+            .eq('id', doctorData.specialty_id)
+            .single();
+            
+          if (!specialtyError) {
+            specialtyInfo = specialtyData;
+          }
+        }
+        
+        // Combine all data
+        const doctorProfileData: DoctorProfile = {
+          id: profileData.id,
+          full_name: profileData.full_name,
+          email: profileData.email,
+          phone: profileData.phone || '',
+          role: profileData.role,
+          doctor_profile: {
+            specialty_id: doctorData.specialty_id || '',
+            experience_years: doctorData.experience_years || 0,
+            qualification: doctorData.qualification || '',
+            about: doctorData.about || '',
+            consultation_fee: doctorData.consultation_fee || 0,
+            available_days: doctorData.available_days || [],
+            available_hours: doctorData.available_hours || {}
+          }
+        };
+        
+        if (specialtyInfo) {
+          doctorProfileData.specialty = {
+            id: specialtyInfo.id,
+            name: specialtyInfo.name
+          };
+        }
+        
+        setDoctorProfile(doctorProfileData);
         
         // Set form states
         setPersonalInfo({
-          full_name: data.full_name || '',
-          email: data.email || '',
-          phone: data.phone || ''
+          full_name: profileData.full_name,
+          email: profileData.email,
+          phone: profileData.phone || ''
         });
         
-        if (data.doctor_profiles) {
-          setProfessionalInfo({
-            specialty_id: data.doctor_profiles.specialty_id || '',
-            experience_years: data.doctor_profiles.experience_years || 0,
-            qualification: data.doctor_profiles.qualification || '',
-            about: data.doctor_profiles.about || '',
-            consultation_fee: data.doctor_profiles.consultation_fee || 0
+        setProfessionalInfo({
+          specialty_id: doctorData.specialty_id || '',
+          experience_years: doctorData.experience_years || 0,
+          qualification: doctorData.qualification || '',
+          about: doctorData.about || '',
+          consultation_fee: doctorData.consultation_fee || 0
+        });
+        
+        // Set availability slots
+        if (doctorData.available_hours) {
+          const hours = doctorData.available_hours as Record<string, string[]>;
+          
+          const updatedSlots = availabilitySlots.map(slot => {
+            return {
+              day: slot.day,
+              slots: hours[slot.day] || []
+            };
           });
           
-          // Set availability slots
-          if (data.doctor_profiles.available_hours) {
-            const hours = data.doctor_profiles.available_hours as Record<string, string[]>;
-            
-            const updatedSlots = availabilitySlots.map(slot => {
-              return {
-                day: slot.day,
-                slots: hours[slot.day] || []
-              };
-            });
-            
-            setAvailabilitySlots(updatedSlots);
-          }
+          setAvailabilitySlots(updatedSlots);
         }
         
         // Fetch specialties for dropdown
