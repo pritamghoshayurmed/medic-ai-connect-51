@@ -25,6 +25,7 @@ interface ChatHistoryItem {
   date: Date;
   summary: string;
   messages: Message[];
+  conversationHistory?: any[];
 }
 
 interface ChatRoom {
@@ -48,7 +49,7 @@ export default function PatientAIChat() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 1,
-      content: "Hello! I'm Kabiraj, your medical assistant. What is your name, age, gender?",
+      content: "Hello! I'm Kabiraj, your medical assistant. What symptom is troubling you the most?",
       isUser: false,
       timestamp: new Date()
     }
@@ -60,6 +61,7 @@ export default function PatientAIChat() {
   const [showHistory, setShowHistory] = useState(false);
   const [chatHistory, setChatHistory] = useState<ChatHistoryItem[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [hasLoadedInitialHistory, setHasLoadedInitialHistory] = useState(false);
   
   // Active tab state
   const [activeTab, setActiveTab] = useState("ai-chat");
@@ -76,7 +78,7 @@ export default function PatientAIChat() {
       give the response in the same language it was asked by the user, like if in Bengali the response should be in Bengali. For other languages response should be in that language. Your goal is to provide fast and accurate medical diagnosis with minimal questions. Follow these rules:
       1. Start with one open-ended question: "What symptom is troubling you the most?"
       2. Use a decision-tree approach with a maximum of 5 precise questions to narrow down the diagnosis.
-      3. Provide a probable diagnosis in 5-6 questions. If uncertain, suggest consulting a doctor.
+      3. Provide a probable diagnosis in 3-4 questions(do not ask too much question give answer after mostly 3,4 questions ). If uncertain, suggest consulting a doctor.
       4. Offer treatment options in a clear, structured format:
          - Modern Medicine: Drug name (dosage), key advice.
          - Ayurveda: Natural remedies & lifestyle suggestions.
@@ -86,7 +88,7 @@ export default function PatientAIChat() {
     },
     {
       role: "model",
-      content: "Hello! I'm Kabiraj, your medical assistant. How can i help you? "
+      content: "Hello! I'm Kabiraj, your medical assistant. What symptom is troubling you the most?"
     }
   ]);
 
@@ -145,15 +147,112 @@ export default function PatientAIChat() {
     }
   }, [user, showHistory]);
 
-  // Add event listener to save chat when the component unmounts
+  // Add event listener to save chat when the component unmounts or when app goes to background
   useEffect(() => {
-    return () => {
-      // Save the chat history if there are meaningful messages
-      if (messages.length > 1) {
-        saveChatToHistory();
+    // Function to save chat data
+    const saveData = async () => {
+      try {
+        if (user && messages.length > 1) {
+          console.log("Saving chat before unmount/blur");
+          await saveChatToHistory();
+        }
+      } catch (error) {
+        console.error("Error saving chat on unmount/blur:", error);
       }
     };
-  }, [messages]);
+    
+    // Add event listeners for mobile scenarios
+    window.addEventListener('beforeunload', saveData);
+    window.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        saveData();
+      }
+    });
+    
+    // For mobile devices specifically
+    window.addEventListener('pagehide', saveData);
+    
+    // Cleanup function
+    return () => {
+      // Save the chat history if there are meaningful messages
+      saveData();
+      
+      // Remove event listeners
+      window.removeEventListener('beforeunload', saveData);
+      window.removeEventListener('visibilitychange', saveData);
+      window.removeEventListener('pagehide', saveData);
+    };
+  }, [user, messages, conversationHistory]);
+
+  // Load chat history when component mounts to avoid repetitive greeting
+  useEffect(() => {
+    if (user && !hasLoadedInitialHistory) {
+      loadMostRecentChat();
+    }
+  }, [user]);
+
+  // Load the most recent chat automatically on startup
+  const loadMostRecentChat = async () => {
+    if (!user) return;
+    
+    try {
+      console.log("Loading most recent chat on startup...");
+      setLoadingHistory(true);
+      
+      // Get the most recent chat
+      const { data, error } = await rawSupabase
+        .from('ai_chat_history')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+        
+      if (error) {
+        throw error;
+      }
+      
+      if (data && data.length > 0) {
+        // Parse the chat data
+        const item = data[0];
+        let parsedMessages: Message[] = [];
+        let parsedConversationHistory = null;
+        
+        try {
+          // Safely parse the JSON data
+          parsedMessages = item.messages ? JSON.parse(item.messages) : [];
+          
+          if (item.conversation_history) {
+            parsedConversationHistory = JSON.parse(item.conversation_history);
+            console.log(`Loaded recent chat with ${parsedConversationHistory.length} conversation history items`);
+          }
+          
+          // Update state with the loaded chat
+          if (parsedMessages.length > 0) {
+            setMessages(parsedMessages);
+          }
+          
+          if (parsedConversationHistory && parsedConversationHistory.length > 0) {
+            // Keep the original system prompt and combine with the loaded conversation
+            const systemPrompt = conversationHistory[0];
+            const loadedConversation = [systemPrompt, ...parsedConversationHistory.slice(1)];
+            setConversationHistory(loadedConversation);
+          }
+          
+          console.log("Successfully loaded most recent chat");
+        } catch (parseError) {
+          console.error("Error parsing chat data:", parseError);
+        }
+      } else {
+        console.log("No previous chat found, starting new conversation");
+      }
+      
+      setHasLoadedInitialHistory(true);
+    } catch (error) {
+      console.error("Error loading most recent chat:", error);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   const sendMessage = async (messageText?: string) => {
     if (isLoading) return;
@@ -161,7 +260,7 @@ export default function PatientAIChat() {
     const message = messageText || input;
     if (!message.trim()) return;
     
-    // Add user message
+    // Add user message to local state
     const newUserMessage: Message = {
       id: Date.now(),
       content: message,
@@ -169,21 +268,23 @@ export default function PatientAIChat() {
       timestamp: new Date()
     };
     
-    setMessages(prev => [...prev, newUserMessage]);
+    // Update UI immediately with user message only
+    const updatedMessagesWithUserOnly = [...messages, newUserMessage];
+    setMessages(updatedMessagesWithUserOnly);
     setInput("");
     
-    // Update conversation history
+    // Update conversation history with user message
     const updatedHistory = [...conversationHistory, { role: "user", content: message }];
     setConversationHistory(updatedHistory);
     
     setIsLoading(true);
     
     try {
-      // Simulate thinking delay (2 seconds)
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      console.log("Processing message:", message);
+      console.log("Conversation history:", JSON.stringify(updatedHistory));
       
-      // Get AI response
-      const response = await askMedicalQuestion(message);
+      // Get AI response - pass the updated conversation history
+      const response = await askMedicalQuestion(message, updatedHistory);
       
       // Add AI response to chat
       const aiMessage: Message = {
@@ -193,18 +294,27 @@ export default function PatientAIChat() {
         timestamp: new Date()
       };
       
-      setMessages(prev => [...prev, aiMessage]);
+      // Update messages with both user and AI message
+      const finalMessages = [...updatedMessagesWithUserOnly, aiMessage];
+      const finalConversationHistory = [...updatedHistory, { role: "model", content: response.answer }];
       
-      // Update conversation history with AI response
-      setConversationHistory([...updatedHistory, { role: "model", content: response.answer }]);
+      setMessages(finalMessages);
+      setConversationHistory(finalConversationHistory);
+      
+      console.log("Final conversation history:", JSON.stringify(finalConversationHistory));
       
       // Explicitly save the chat to history after each meaningful exchange
       // This ensures the chat is stored in the database
       if (user) {
-        // Wait a bit to ensure state is updated
-        setTimeout(async () => {
-          await saveChatToHistory();
-        }, 500);
+        try {
+          console.log("Saving chat to database...");
+          // Save immediately without setTimeout to ensure it's saved before any potential navigation
+          await saveChatToHistory(finalMessages, finalConversationHistory);
+          console.log("Chat saved successfully");
+        } catch (saveError) {
+          console.error("Error saving chat:", saveError);
+          // Continue even if saving fails - we'll retry on component unmount
+        }
       }
       
     } catch (error: any) {
@@ -382,6 +492,8 @@ export default function PatientAIChat() {
     setLoadingHistory(true);
     
     try {
+      console.log("Fetching chat history from database...");
+      
       // Using rawSupabase to avoid type issues
       const { data, error } = await rawSupabase
         .from('ai_chat_history')
@@ -389,16 +501,50 @@ export default function PatientAIChat() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
         
-      if (error) throw error;
+      if (error) {
+        console.error("Database error when fetching chat history:", error);
+        throw error;
+      }
+
+      console.log(`Retrieved ${data?.length || 0} chat history sessions`);
+      
+      if (!data || data.length === 0) {
+        setChatHistory([]);
+        return;
+      }
       
       // Format the chat history data
-      const formattedHistory = data.map(item => ({
-        id: item.id,
-        date: new Date(item.created_at),
-        summary: item.summary || "Chat session",
-        messages: JSON.parse(item.messages || '[]')
-      }));
+      const formattedHistory = data.map(item => {
+        let parsedMessages: Message[] = [];
+        let parsedConversationHistory = null;
+        
+        try {
+          // Safely parse the JSON data
+          parsedMessages = item.messages ? JSON.parse(item.messages) : [];
+          
+          if (item.conversation_history) {
+            parsedConversationHistory = JSON.parse(item.conversation_history);
+            console.log(`Chat ${item.id} has conversation history with ${parsedConversationHistory.length} messages`);
+          } else {
+            console.log(`Chat ${item.id} does not have saved conversation history`);
+          }
+        } catch (parseError) {
+          console.error("Error parsing JSON data for chat history:", parseError);
+          // Use empty arrays for failed parsing
+          parsedMessages = [];
+          parsedConversationHistory = null;
+        }
+        
+        return {
+          id: item.id,
+          date: new Date(item.created_at),
+          summary: item.summary || "Chat session",
+          messages: parsedMessages,
+          conversationHistory: parsedConversationHistory
+        };
+      });
       
+      console.log("Successfully processed chat history data");
       setChatHistory(formattedHistory);
     } catch (error) {
       console.error("Error loading chat history:", error);
@@ -413,90 +559,181 @@ export default function PatientAIChat() {
   };
 
   const loadChatSession = (historyItem: ChatHistoryItem) => {
+    console.log("Loading chat session:", historyItem.id);
     setMessages(historyItem.messages);
+    
+    // If the saved conversation history exists, use it
+    if (historyItem.conversationHistory && historyItem.conversationHistory.length > 0) {
+      console.log("Using saved conversation history with", historyItem.conversationHistory.length, "messages");
+      setConversationHistory(historyItem.conversationHistory);
+    } else {
+      console.log("Reconstructing conversation history from messages");
+      // Otherwise rebuild a basic conversation history from the messages
+      const systemPrompt = {
+        role: "user",
+        content: conversationHistory[0].content // Keep the original system prompt
+      };
+      
+      // Convert normal messages to the conversation history format
+      const messageHistory = historyItem.messages.map(msg => ({
+        role: msg.isUser ? "user" : "model",
+        content: msg.content
+      }));
+      
+      // Combine with the system prompt
+      const reconstructedHistory = [systemPrompt, ...messageHistory];
+      console.log("Reconstructed conversation history with", reconstructedHistory.length, "messages");
+      
+      setConversationHistory(reconstructedHistory);
+    }
+    
     setShowHistory(false);
   };
 
-  const saveChatToHistory = async () => {
-    if (!user || messages.length <= 1) return;
+  // Update the saveChatToHistory function to accept optional parameters
+  const saveChatToHistory = async (
+    messagesToSave?: Message[], 
+    conversationHistoryToSave?: Array<{role: string, content: string}>
+  ) => {
+    // Use provided values or current state
+    const msgsToSave = messagesToSave || messages;
+    const convHistoryToSave = conversationHistoryToSave || conversationHistory;
     
-    try {
-      // Ensure the table exists before attempting to insert
+    if (!user || msgsToSave.length <= 1) {
+      console.log("Not saving chat - no user or insufficient messages");
+      return;
+    }
+    
+    const MAX_RETRIES = 3;
+    let retryCount = 0;
+    
+    while (retryCount < MAX_RETRIES) {
       try {
-        // Try to create the table structure first (will be ignored if it already exists)
-        const createTableSQL = `
-          CREATE TABLE IF NOT EXISTS public.ai_chat_history (
-            id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-            user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-            messages JSONB NOT NULL,
-            summary TEXT,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
-          );
-          
-          -- Add RLS policies if they don't exist
-          DO $$ 
-          BEGIN
-            IF NOT EXISTS (
-              SELECT FROM pg_policies 
-              WHERE tablename = 'ai_chat_history' AND policyname = 'Users can view their own chat history'
-            ) THEN
-              ALTER TABLE public.ai_chat_history ENABLE ROW LEVEL SECURITY;
-              
-              CREATE POLICY "Users can view their own chat history" 
-                ON public.ai_chat_history FOR SELECT 
-                USING (auth.uid() = user_id);
-              
-              CREATE POLICY "Users can insert their own chat history" 
-                ON public.ai_chat_history FOR INSERT 
-                WITH CHECK (auth.uid() = user_id);
-            END IF;
-          END $$;
-        `;
+        console.log(`Saving chat to database (attempt ${retryCount + 1})...`);
         
-        await rawSupabase.rpc('exec_sql', { sql: createTableSQL });
-      } catch (e) {
-        // Ignore errors here as the function might not exist
-        console.log('Note: Could not create table via RPC, continuing with insert...');
-      }
-      
-      // Extract a summary from the conversation
-      const userMessages = messages.filter(m => m.isUser).map(m => m.content);
-      
-      // Get the first question as a summary
-      const summary = userMessages[0]?.substring(0, 50) + "...";
-      
-      // Save to database using rawSupabase to avoid type issues
-      const { error } = await rawSupabase
-        .from('ai_chat_history')
-        .insert({
-          user_id: user.id,
-          messages: JSON.stringify(messages),
-          summary: summary,
-          created_at: new Date().toISOString()
+        // Extract a summary from the conversation
+        const userMessages = msgsToSave.filter(m => m.isUser).map(m => m.content);
+        
+        // Get the first question as a summary
+        const summary = userMessages[0]?.substring(0, 50) + "...";
+        
+        // Safely stringify the data before saving
+        const messagesJson = JSON.stringify(msgsToSave);
+        const conversationHistoryJson = JSON.stringify(convHistoryToSave);
+        
+        console.log("Chat data to save:", {
+          messagesCount: msgsToSave.length,
+          conversationHistoryCount: convHistoryToSave.length,
+          summary,
+          userId: user.id,
+          firstUserMsg: userMessages[0]?.substring(0, 30)
         });
         
-      if (error) {
-        // If we get a table not found error, we need to try a different approach
-        if (error.message.includes('relation "ai_chat_history" does not exist')) {
-          console.error('Table does not exist, need to create it first');
-          throw new Error('AI Chat History table does not exist and could not be created automatically');
+        // Save to database using rawSupabase to avoid type issues
+        const { data, error } = await rawSupabase
+          .from('ai_chat_history')
+          .insert({
+            user_id: user.id,
+            messages: messagesJson,
+            conversation_history: conversationHistoryJson,
+            summary: summary,
+            created_at: new Date().toISOString()
+          })
+          .select();
+          
+        if (error) {
+          // If we get a table not found error, we need to create it
+          if (error.message.includes('relation "ai_chat_history" does not exist')) {
+            console.error('Table does not exist, attempting to create it');
+            await createChatHistoryTable();
+            // Continue to next retry after creating table
+            retryCount++;
+            continue;
+          }
+          throw error;
         }
-        throw error;
+        
+        console.log(`Chat saved successfully to database. Record ID: ${data?.[0]?.id}`);
+        
+        // Only show toast when explicitly saving (not during background saves)
+        if (!messagesToSave && !conversationHistoryToSave) {
+          toast({
+            title: "Success",
+            description: "Chat saved to history",
+          });
+        }
+        
+        // Return success
+        return true;
+        
+      } catch (error) {
+        console.error(`Error saving chat (attempt ${retryCount + 1}):`, error);
+        retryCount++;
+        
+        // Wait before retrying (exponential backoff)
+        if (retryCount < MAX_RETRIES) {
+          const delay = 1000 * Math.pow(2, retryCount);
+          console.log(`Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          // Only show toast when explicitly saving (not during background saves)
+          if (!messagesToSave && !conversationHistoryToSave) {
+            toast({
+              title: "Error",
+              description: "Failed to save chat to history",
+              variant: "destructive"
+            });
+          }
+          
+          // Rethrow error to allow caller to handle it
+          throw error;
+        }
       }
+    }
+  };
+
+  // Helper function to create the chat history table if it doesn't exist
+  const createChatHistoryTable = async () => {
+    try {
+      // Try to create the table structure
+      const createTableSQL = `
+        CREATE TABLE IF NOT EXISTS public.ai_chat_history (
+          id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+          user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+          messages JSONB NOT NULL,
+          conversation_history JSONB,
+          summary TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+        );
+        
+        -- Add RLS policies if they don't exist
+        DO $$ 
+        BEGIN
+          IF NOT EXISTS (
+            SELECT FROM pg_policies 
+            WHERE tablename = 'ai_chat_history' AND policyname = 'Users can view their own chat history'
+          ) THEN
+            ALTER TABLE public.ai_chat_history ENABLE ROW LEVEL SECURITY;
+            
+            CREATE POLICY "Users can view their own chat history" 
+              ON public.ai_chat_history FOR SELECT 
+              USING (auth.uid() = user_id);
+            
+            CREATE POLICY "Users can insert their own chat history" 
+              ON public.ai_chat_history FOR INSERT 
+              WITH CHECK (auth.uid() = user_id);
+          END IF;
+        END $$;
+      `;
       
-      toast({
-        title: "Success",
-        description: "Chat saved to history",
-      });
-      
-    } catch (error) {
-      console.error("Error saving chat:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save chat to history",
-        variant: "destructive"
-      });
+      console.log("Attempting to create ai_chat_history table");
+      await rawSupabase.rpc('exec_sql', { sql: createTableSQL });
+      console.log("Table creation appears successful");
+      return true;
+    } catch (e) {
+      console.error('Error creating table via RPC:', e);
+      return false;
     }
   };
 

@@ -583,15 +583,65 @@ function generatePDFReport(report: any, analysis: any) {
 /**
  * Ask a medical question and get an AI-generated answer
  */
-export async function askMedicalQuestion(question: string): Promise<ReportQAResult> {
+export async function askMedicalQuestion(question: string, conversationHistory?: Array<{role: string, content: string}>): Promise<ReportQAResult> {
   try {
-    const prompt = `You are a medical AI assistant. Answer the following medical question 
-    with accurate and scientifically valid information. Be clear and concise in your answer.
+    console.log("askMedicalQuestion called with conversation history length:", conversationHistory?.length || 0);
     
-    QUESTION: ${question}`;
+    let prompt;
+    
+    if (conversationHistory && conversationHistory.length > 0) {
+      // Extract system prompt from the first message if it exists
+      const systemPrompt = conversationHistory[0].role === "user" ? conversationHistory[0].content : "";
+      
+      // Extract prior messages (skip system prompt)
+      // Only include the last 6 messages to stay within token limits
+      const recentMessages = conversationHistory.slice(1).slice(-6);
+      
+      console.log("Recent messages for context:", JSON.stringify(recentMessages));
+      
+      // Format the conversation history as a detailed exchange
+      const contextMessages = recentMessages.map(msg => 
+        `${msg.role === "user" ? "Patient" : "Kaviraj AI"}: ${msg.content}`
+      ).join("\n\n");
+      
+      prompt = `${systemPrompt}
+
+You are Kaviraj AI, a medical diagnosis assistant. You have the following conversation history with a patient. Remember that you should NOT repeat questions that have already been answered, and you should build on previous information.
+
+Previous conversation history:
+${contextMessages}
+
+Patient's new message: ${question}
+
+Based on ALL information provided so far (including ALL previous symptoms and details shared), respond as Kaviraj AI. If you have enough information to give a diagnosis after 3-4 questions, provide it now along with treatment options.
+
+Your response must follow these guidelines:
+Strictly dont ask more than 4 questions. keep this in mind.
+Format treatment options clearly with "Modern Medicine" and "Ayurveda" sections 
+speak withh empathy and clarity , avoiding medical jargon 
+For non medical Questions ,clarify i am  for medical diagnosis only
+1. NEVER ask the same question twice
+2. NEVER ask for information the patient has already provided
+3. If the patient has described symptoms already, use that information to progress to the next diagnostic step
+4. Format treatment options in clearly labeled sections:
+   - Modern Medicine: [specific medications with dosage]
+   - Ayurveda: [natural remedies and lifestyle changes]
+5. Use clear, empathetic language that patients can understand`;
+    } else {
+      // Fallback to the simple prompt if no conversation history is provided
+      prompt = `You are a medical AI assistant named Kaviraj AI. Your goal is to diagnose patients through a series of focused questions  maximum 3-4 questions .strictly number of questions should not be more than 4 . and provide helpful treatment options.
+      
+Start by asking what symptom is troubling the patient the most. Then follow up with specific questions to understand their condition, with the aim of providing a diagnosis and treatment options after 3-4 questions.
+
+The patient's first message is: ${question}`;
+    }
+    
+    console.log("Sending prompt to AI service");
     
     // Use direct API call instead of the SDK
     const responseText = await callGeminiDirectly(prompt);
+    
+    console.log("Received response from AI service");
     
     return {
       answer: responseText,
@@ -599,8 +649,19 @@ export async function askMedicalQuestion(question: string): Promise<ReportQAResu
     };
   } catch (error: any) {
     console.error('Error processing question:', error);
+    
+    // Log additional error details for debugging
+    if (error.response) {
+      console.error('API response error:', JSON.stringify(error.response.data));
+    }
+    
+    // Improve error reporting for different situations
     if (error.message?.includes('API key')) {
       throw new Error('Invalid API key. Please check your Gemini API key in settings.');
+    } else if (error.message?.includes('timeout') || error.code === 'ECONNABORTED') {
+      throw new Error('Connection timed out. Please check your internet connection and try again.');
+    } else if (error.message?.includes('network') || error.code === 'ERR_NETWORK') {
+      throw new Error('Network error. Please check your internet connection and try again.');
     } else {
       throw new Error('Failed to process your medical question. Please try again later.');
     }
