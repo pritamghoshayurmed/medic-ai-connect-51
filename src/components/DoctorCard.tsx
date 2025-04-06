@@ -1,4 +1,3 @@
-
 import { Doctor } from "@/types";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -8,9 +7,17 @@ interface DoctorCardProps {
   doctor: Doctor;
   onBookAppointment?: () => void;
   onViewProfile?: () => void;
+  actionText?: string;
+  actionVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
 }
 
-export default function DoctorCard({ doctor, onBookAppointment, onViewProfile }: DoctorCardProps) {
+export default function DoctorCard({ 
+  doctor, 
+  onBookAppointment, 
+  onViewProfile,
+  actionText = "Book Appointment",
+  actionVariant = "default"
+}: DoctorCardProps) {
   const navigate = useNavigate();
 
   return (
@@ -50,9 +57,10 @@ export default function DoctorCard({ doctor, onBookAppointment, onViewProfile }:
         </Button>
         <Button 
           size="sm" 
+          variant={actionVariant}
           onClick={onBookAppointment}
         >
-          Book Appointment
+          {actionText}
         </Button>
       </div>
     </div>

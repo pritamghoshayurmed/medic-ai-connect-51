@@ -1,7 +1,6 @@
-import { useRef, useEffect, useState } from 'react';
-import { Chart as ChartJS, LinearScale, Title, Tooltip, Legend, ChartData, ChartOptions } from 'chart.js';
+import { useRef, useState } from 'react';
+import { Chart as ChartJS, registerables, ChartData, ChartOptions } from 'chart.js';
 import { Chart } from 'react-chartjs-2';
-import 'chartjs-chart-matrix';
 import { Card, CardContent } from './ui/card';
 import { Button } from './ui/button';
 import { Separator } from './ui/separator';
@@ -9,16 +8,8 @@ import { Slider } from './ui/slider';
 import { Badge } from './ui/badge';
 import { Download, ZoomIn, ZoomOut, Eye } from 'lucide-react';
 
-// Register the matrix controller
-import { MatrixController, MatrixElement } from 'chartjs-chart-matrix';
-ChartJS.register(MatrixController, MatrixElement, LinearScale, Title, Tooltip, Legend);
-
-// Define a custom data point interface that includes our custom 'v' property
-interface HeatmapDataPoint {
-  x: number;
-  y: number;
-  v: number; // v represents the intensity/value at this point
-}
+// Register all Chart.js components
+ChartJS.register(...registerables);
 
 interface DynamicHeatmapProps {
   findings: string[];
@@ -29,109 +20,95 @@ export default function DynamicHeatmap({ findings, imageUrl }: DynamicHeatmapPro
   const [intensity, setIntensity] = useState(0.7);
   const chartRef = useRef<ChartJS>(null);
   const [zoom, setZoom] = useState(1);
-  const [chartData, setChartData] = useState<ChartData<'matrix', HeatmapDataPoint[]> | null>(null);
   
-  // Generate random data for heatmap - in a real app, this would come from AI analysis
-  const generateHeatmapData = (): HeatmapDataPoint[] => {
-    const width = 20;
-    const height = 20;
-    const data: HeatmapDataPoint[] = [];
+  // Generate random data points for heatmap visualization
+  const generateData = () => {
+    const data = [];
+    const count = 50;
     
-    // Create some patterns - this simulates areas of interest in the scan
-    // In a real implementation, this would be calculated based on AI analysis
+    // Create hotspots
     const hotspots = [
       { x: 5, y: 5, radius: 3, intensity: 0.9 },
       { x: 15, y: 8, radius: 4, intensity: 0.8 },
       { x: 10, y: 15, radius: 5, intensity: 0.7 },
     ];
     
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        // Calculate value based on proximity to hotspots
-        let value = 0;
-        
-        hotspots.forEach(hotspot => {
-          const distance = Math.sqrt(Math.pow(x - hotspot.x, 2) + Math.pow(y - hotspot.y, 2));
-          if (distance < hotspot.radius) {
-            value = Math.max(value, hotspot.intensity * (1 - distance / hotspot.radius));
-          }
-        });
-        
-        // Add some random noise
-        value += Math.random() * 0.1;
-        
-        // Make sure value is in range [0, 1]
-        value = Math.min(1, value);
-        
-        // Exclude values below a threshold to create "empty" areas
-        if (value > 0.15) {
-          data.push({
-            x,
-            y,
-            v: value
-          });
+    for (let i = 0; i < count; i++) {
+      const x = Math.floor(Math.random() * 20);
+      const y = Math.floor(Math.random() * 20);
+      
+      // Calculate intensity based on proximity to hotspots
+      let value = 0;
+      hotspots.forEach(hotspot => {
+        const distance = Math.sqrt(Math.pow(x - hotspot.x, 2) + Math.pow(y - hotspot.y, 2));
+        if (distance < hotspot.radius) {
+          value = Math.max(value, hotspot.intensity * (1 - distance / hotspot.radius));
         }
+      });
+      
+      // Add random noise
+      value += Math.random() * 0.1;
+      value = Math.min(1, value);
+      
+      if (value > 0.2) {
+        data.push({
+          x,
+          y,
+          r: value * 10,
+          value
+        });
       }
     }
     
     return data;
   };
   
-  // Initialize chart data when component mounts
-  useEffect(() => {
-    const data: ChartData<'matrix', HeatmapDataPoint[]> = {
-      datasets: [
-        {
-          label: 'Diagnostic Heatmap',
-          data: generateHeatmapData(),
-          backgroundColor(context) {
-            const value = (context.dataset.data[context.dataIndex] as HeatmapDataPoint).v;
-            const alpha = value * intensity;
-            
-            // Red for high values, yellow for medium, green for low
-            if (value > 0.7) {
-              return `rgba(255, 0, 0, ${alpha})`;
-            } else if (value > 0.4) {
-              return `rgba(255, 255, 0, ${alpha})`;
-            } else {
-              return `rgba(0, 255, 0, ${alpha})`;
-            }
-          },
-          borderColor: 'rgba(0, 0, 0, 0.1)',
-          borderWidth: 1,
-          width: ({ chart }) => (chart.chartArea || {}).width / 20 * zoom,
-          height: ({ chart }) => (chart.chartArea || {}).height / 20 * zoom,
-        }
-      ]
-    };
-    
-    setChartData(data);
-  }, [intensity, zoom]);
+  const heatmapData = generateData();
   
-  const options: ChartOptions<'matrix'> = {
+  // Chart configuration
+  const data: ChartData = {
+    datasets: [
+      {
+        type: 'bubble',
+        label: 'Anomaly Heatmap',
+        data: heatmapData,
+        backgroundColor: heatmapData.map(point => {
+          const value = point.value as number;
+          const alpha = value * intensity;
+          
+          if (value > 0.7) {
+            return `rgba(255, 0, 0, ${alpha})`;
+          } else if (value > 0.4) {
+            return `rgba(255, 200, 0, ${alpha})`;
+          } else {
+            return `rgba(0, 200, 0, ${alpha})`;
+          }
+        }),
+        borderWidth: 1,
+        borderColor: 'rgba(0,0,0,0.1)'
+      }
+    ]
+  };
+  
+  const options: ChartOptions = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       tooltip: {
         callbacks: {
-          title() {
-            return 'Region Analysis';
-          },
-          label(context) {
-            const value = (context.dataset.data[context.dataIndex] as HeatmapDataPoint).v;
+          label: function(context) {
+            const point = context.raw as any;
+            const value = point.value;
             const intensity = Math.round(value * 100);
             let risk = 'Low';
             
-            if (value > 0.7) {
-              risk = 'High';
-            } else if (value > 0.4) {
-              risk = 'Medium';
-            }
+            if (value > 0.7) risk = 'High';
+            else if (value > 0.4) risk = 'Medium';
             
             return [
+              'Region Analysis',
               `Anomaly Probability: ${intensity}%`,
-              `Risk Level: ${risk}`,
-              `Region: (${(context.dataset.data[context.dataIndex] as HeatmapDataPoint).x}, ${(context.dataset.data[context.dataIndex] as HeatmapDataPoint).y})`
+              `Risk Level: ${risk}`
             ];
           }
         }
@@ -142,33 +119,29 @@ export default function DynamicHeatmap({ findings, imageUrl }: DynamicHeatmapPro
     },
     scales: {
       x: {
-        type: 'linear',
-        offset: false,
-        grid: {
-          display: false
-        },
+        min: 0,
+        max: 20,
         ticks: {
           display: false
         },
-        min: 0,
-        max: 20
+        grid: {
+          display: false
+        }
       },
       y: {
-        type: 'linear',
-        offset: false,
-        grid: {
-          display: false
-        },
+        min: 0,
+        max: 20,
         ticks: {
           display: false
         },
-        min: 0,
-        max: 20
+        grid: {
+          display: false
+        }
       }
     }
   };
   
-  // Function to download the heatmap as an image
+  // Download heatmap as image
   const downloadHeatmap = () => {
     if (chartRef.current) {
       const url = chartRef.current.toBase64Image();
@@ -180,47 +153,38 @@ export default function DynamicHeatmap({ findings, imageUrl }: DynamicHeatmapPro
   };
   
   // Zoom functions
-  const zoomIn = () => {
-    setZoom(prev => Math.min(prev + 0.1, 2));
-  };
+  const zoomIn = () => setZoom(prev => Math.min(prev + 0.1, 2));
+  const zoomOut = () => setZoom(prev => Math.max(prev - 0.1, 0.5));
   
-  const zoomOut = () => {
-    setZoom(prev => Math.max(prev - 0.1, 0.5));
-  };
-  
-  // Function to calculate severity based on heatmap data
+  // Calculate severity based on data points
   const calculateSeverity = () => {
-    const highIntensityCount = chartData?.datasets[0].data.filter(d => d.v > 0.7).length || 0;
-    const mediumIntensityCount = chartData?.datasets[0].data.filter(d => d.v > 0.4 && d.v <= 0.7).length || 0;
+    const highIntensityCount = heatmapData.filter(d => (d.value as number) > 0.7).length;
+    const mediumIntensityCount = heatmapData.filter(d => (d.value as number) > 0.4 && (d.value as number) <= 0.7).length;
     
-    if (highIntensityCount > 10) {
-      return 'High';
-    } else if (highIntensityCount > 5 || mediumIntensityCount > 15) {
-      return 'Medium';
-    } else {
-      return 'Low';
-    }
+    if (highIntensityCount > 10) return 'High';
+    else if (highIntensityCount > 5 || mediumIntensityCount > 15) return 'Medium';
+    else return 'Low';
   };
   
   const severity = calculateSeverity();
   
-  // Determine areas of interest based on the heatmap
+  // Determine areas of interest
   const getAreasOfInterest = () => {
     const areas = [];
     
-    if (chartData?.datasets[0].data.some(d => d.x < 7 && d.y < 7 && d.v > 0.6)) {
+    if (heatmapData.some(d => (d as any).x < 7 && (d as any).y < 7 && (d.value as number) > 0.6)) {
       areas.push('Upper Left Quadrant');
     }
-    if (chartData?.datasets[0].data.some(d => d.x > 12 && d.y < 7 && d.v > 0.6)) {
+    if (heatmapData.some(d => (d as any).x > 12 && (d as any).y < 7 && (d.value as number) > 0.6)) {
       areas.push('Upper Right Quadrant');
     }
-    if (chartData?.datasets[0].data.some(d => d.x < 7 && d.y > 12 && d.v > 0.6)) {
+    if (heatmapData.some(d => (d as any).x < 7 && (d as any).y > 12 && (d.value as number) > 0.6)) {
       areas.push('Lower Left Quadrant');
     }
-    if (chartData?.datasets[0].data.some(d => d.x > 12 && d.y > 12 && d.v > 0.6)) {
+    if (heatmapData.some(d => (d as any).x > 12 && (d as any).y > 12 && (d.value as number) > 0.6)) {
       areas.push('Lower Right Quadrant');
     }
-    if (chartData?.datasets[0].data.some(d => d.x > 7 && d.x < 12 && d.y > 7 && d.y < 12 && d.v > 0.6)) {
+    if (heatmapData.some(d => (d as any).x > 7 && (d as any).x < 12 && (d as any).y > 7 && (d as any).y < 12 && (d.value as number) > 0.6)) {
       areas.push('Central Region');
     }
     
@@ -269,18 +233,12 @@ export default function DynamicHeatmap({ findings, imageUrl }: DynamicHeatmapPro
           <div className="flex-1 border rounded-md overflow-hidden bg-gray-50" style={{ minHeight: '300px' }}>
             <div className="p-2 bg-gray-100 border-b font-medium text-sm">AI Heatmap Analysis</div>
             <div style={{ height: '280px', position: 'relative' }}>
-              {chartData ? (
-                <Chart 
-                  ref={chartRef}
-                  type="matrix"
-                  data={chartData}
-                  options={options}
-                />
-              ) : (
-                <div className="flex items-center justify-center h-full">
-                  <p>Loading heatmap visualization...</p>
-                </div>
-              )}
+              <Chart 
+                ref={chartRef}
+                type="bubble"
+                data={data}
+                options={options}
+              />
             </div>
           </div>
         </div>

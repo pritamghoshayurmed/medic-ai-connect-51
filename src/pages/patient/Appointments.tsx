@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -36,6 +35,7 @@ export default function Appointments() {
       try {
         setLoading(true);
         
+        // Simplify the query to avoid foreign key relationship issues
         const { data, error } = await supabase
           .from('appointments')
           .select(`
@@ -45,20 +45,7 @@ export default function Appointments() {
             appointment_date,
             appointment_time,
             status,
-            symptoms,
-            doctor:doctor_id (
-              id,
-              full_name,
-              email,
-              phone,
-              role
-            ),
-            doctor_specialty:doctor_id (
-              doctor_profiles (
-                specialty,
-                experience_years
-              )
-            )
+            symptoms
           `)
           .eq('patient_id', user.id)
           .order('appointment_date', { ascending: true });
@@ -68,25 +55,51 @@ export default function Appointments() {
           throw error;
         }
         
-        if (data) {
+        if (data && data.length > 0) {
+          // Get unique doctor IDs
+          const doctorIds = [...new Set(data.map(appt => appt.doctor_id))];
+          
+          // Fetch doctor details separately
+          const { data: doctorsData, error: doctorsError } = await supabase
+            .from('profiles')
+            .select('id, full_name, email, phone, role')
+            .in('id', doctorIds)
+            .eq('role', 'doctor');
+            
+          if (doctorsError) {
+            console.error("Error fetching doctors:", doctorsError);
+            throw doctorsError;
+          }
+          
+          // Create a map of doctors for easy lookup
+          const doctorsMap = new Map();
+          if (doctorsData) {
+            doctorsData.forEach(doc => {
+              doctorsMap.set(doc.id, {
+                id: doc.id,
+                name: doc.full_name || 'Unknown Doctor',
+                email: doc.email || '',
+                phone: doc.phone || '',
+                role: 'doctor' as const,
+                specialty: 'General Practitioner', // Default value
+                experience: 5, // Default value
+                profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+              });
+            });
+          }
+          
+          // Map appointments with doctor info
           const formattedAppointments = data.map(appt => {
             const doctorId = appt.doctor_id || '';
-            
-            // Cast to any to avoid TypeScript errors with dynamic data from Supabase
-            const doctor = appt.doctor as any || {};
-            const doctorSpecialtyData = 
-              ((appt.doctor_specialty as any)?.doctor_profiles?.[0]) || {};
-            
-            // Create the doctor object with safe type assertions
-            const doctorObj: Doctor = {
-              id: doctor.id as string || doctorId,
-              name: doctor.full_name as string || 'Unknown Doctor',
-              email: doctor.email as string || '',
-              phone: doctor.phone as string || '',
+            const doctorObj = doctorsMap.get(doctorId) || {
+              id: doctorId,
+              name: 'Unknown Doctor',
+              email: '',
+              phone: '',
               role: 'doctor' as const,
-              specialty: doctorSpecialtyData.specialty as string || 'General Practitioner',
-              experience: Number(doctorSpecialtyData.experience_years) || 0,
-              profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png',
+              specialty: 'General Practitioner',
+              experience: 5,
+              profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
             };
             
             return {
@@ -102,6 +115,8 @@ export default function Appointments() {
           });
         
           setAppointments(formattedAppointments);
+        } else {
+          setAppointments([]);
         }
       } catch (error) {
         console.error("Error:", error);

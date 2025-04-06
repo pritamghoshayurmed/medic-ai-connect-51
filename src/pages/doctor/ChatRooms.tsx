@@ -380,6 +380,9 @@ export default function DoctorChatRooms() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Chat</DialogTitle>
+                <p className="text-sm text-muted-foreground">
+                  Select one or more doctors to start a conversation with.
+                </p>
               </DialogHeader>
               
               <div className="space-y-4 py-4">

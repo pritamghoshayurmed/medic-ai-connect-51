@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -7,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, Search, Clock, CalendarIcon } from "lucide-react";
+import { ChevronLeft, Search, Clock, CalendarIcon, MessageSquare, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +14,8 @@ import { supabase } from "@/integrations/supabase/client";
 import DoctorCard from "@/components/DoctorCard";
 import BottomNavigation from "@/components/BottomNavigation";
 import { Doctor } from "@/types";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 
 // Available time slots
 const TIME_SLOTS = [
@@ -46,10 +47,19 @@ export default function FindDoctor() {
   const searchParams = new URLSearchParams(location.search);
   const preSelectedDoctorId = searchParams.get('selected');
   
+  // Check if we have chat data from the location state
+  const chatData = location.state?.fromChat ? {
+    fromChat: location.state.fromChat,
+    chatSummary: location.state.chatSummary,
+    summaryText: location.state.summaryText,
+    doctorList: location.state.doctorList
+  } : null;
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [specialty, setSpecialty] = useState("All Specialties");
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
+  const [appointmentDoctors, setAppointmentDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
   
   // Appointment booking state
@@ -57,8 +67,13 @@ export default function FindDoctor() {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [timeSlot, setTimeSlot] = useState<string | undefined>(undefined);
-  const [reason, setReason] = useState("");
+  const [reason, setReason] = useState(chatData?.summaryText || "");
   const [bookingLoading, setBookingLoading] = useState(false);
+  
+  // Flag to show only appointed doctors
+  const [showOnlyAppointedDoctors, setShowOnlyAppointedDoctors] = useState(
+    chatData?.doctorList && chatData.doctorList.length > 0
+  );
   
   useEffect(() => {
     const fetchDoctors = async () => {
@@ -91,7 +106,18 @@ export default function FindDoctor() {
         }));
         
         setDoctors(formattedDoctors);
-        setFilteredDoctors(formattedDoctors);
+        
+        // If we have a doctorList from chat data, filter to those doctors
+        if (chatData?.doctorList && chatData.doctorList.length > 0) {
+          const doctorIds = chatData.doctorList.map((d: any) => d.id);
+          const appointedDocs = formattedDoctors.filter(doc => 
+            doctorIds.includes(doc.id)
+          );
+          setAppointmentDoctors(appointedDocs);
+          setFilteredDoctors(appointedDocs);
+        } else {
+          setFilteredDoctors(formattedDoctors);
+        }
         
         // If there's a preselected doctor, open the booking dialog
         if (preSelectedDoctorId) {
@@ -109,11 +135,12 @@ export default function FindDoctor() {
     };
     
     fetchDoctors();
-  }, [preSelectedDoctorId]);
+  }, [preSelectedDoctorId, chatData]);
   
   // Filter doctors when search query or specialty changes
   useEffect(() => {
-    let filtered = [...doctors];
+    // Start with either all doctors or only those with appointments
+    let filtered = showOnlyAppointedDoctors ? [...appointmentDoctors] : [...doctors];
     
     // Apply search filter
     if (searchQuery) {
@@ -130,7 +157,7 @@ export default function FindDoctor() {
     }
     
     setFilteredDoctors(filtered);
-  }, [searchQuery, specialty, doctors]);
+  }, [searchQuery, specialty, doctors, appointmentDoctors, showOnlyAppointedDoctors]);
   
   const handleBookAppointment = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
@@ -192,6 +219,54 @@ export default function FindDoctor() {
     }
   };
   
+  const handleSendChatToDoctor = async (doctor: Doctor) => {
+    if (!user || !chatData) {
+      toast({
+        title: "Error",
+        description: "No chat data available to send",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setBookingLoading(true);
+      
+      // Insert a new message with the chat data
+      const { data, error } = await supabase
+        .from('messages')
+        .insert({
+          sender_id: user.id,
+          receiver_id: doctor.id,
+          content: chatData.chatSummary,
+          timestamp: new Date().toISOString(),
+          read: false,
+          is_ai_chat: true // Flag to identify this is an AI chat summary
+        })
+        .select();
+        
+      if (error) throw error;
+      
+      toast({
+        title: "Success!",
+        description: `Chat summary sent to ${doctor.name}`,
+      });
+      
+      // Navigate back to the chat page
+      navigate("/patient/chat");
+      
+    } catch (error) {
+      console.error("Error sending chat to doctor:", error);
+      toast({
+        title: "Error",
+        description: "Failed to send chat to doctor. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+  
   return (
     <div className="pb-24">
       {/* Header */}
@@ -200,7 +275,44 @@ export default function FindDoctor() {
           <ChevronLeft />
         </Button>
         <h1 className="text-xl font-bold">Find Doctor</h1>
+        {chatData && (
+          <Badge variant="secondary" className="ml-auto">
+            <MessageSquare className="h-3 w-3 mr-1" />
+            Sending Chat
+          </Badge>
+        )}
       </div>
+      
+      {/* Chat Summary Card (if coming from chat) */}
+      {chatData && (
+        <Card className="m-4 p-3 bg-primary/10 border-primary/30">
+          <p className="text-sm font-medium mb-2">You're sending an AI chat summary:</p>
+          <p className="text-sm text-gray-600 line-clamp-2">{chatData.summaryText}</p>
+          
+          {chatData.doctorList && chatData.doctorList.length > 0 && (
+            <div className="mt-3 flex items-center justify-between">
+              <p className="text-xs text-primary font-medium">
+                Showing doctors with appointments
+              </p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="text-xs h-7 border-primary text-primary"
+                onClick={() => setShowOnlyAppointedDoctors(!showOnlyAppointedDoctors)}
+              >
+                {showOnlyAppointedDoctors ? "Show All Doctors" : "Show Only My Doctors"}
+              </Button>
+            </div>
+          )}
+          
+          {chatData.doctorList === null && (
+            <div className="mt-3 flex items-center text-amber-600 bg-amber-50 p-2 rounded-md">
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              <p className="text-xs">You don't have any confirmed appointments with doctors.</p>
+            </div>
+          )}
+        </Card>
+      )}
       
       {/* Search */}
       <div className="p-4">
@@ -232,7 +344,14 @@ export default function FindDoctor() {
       
       {/* Doctor List */}
       <div className="px-4">
-        <h2 className="text-lg font-bold mb-4">Available Doctors</h2>
+        <h2 className="text-lg font-bold mb-4">
+          {chatData 
+            ? showOnlyAppointedDoctors && chatData.doctorList?.length > 0
+              ? "Your Doctors:"
+              : "Select a doctor to send your chat to:"
+            : "Available Doctors"
+          }
+        </h2>
         
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -243,20 +362,35 @@ export default function FindDoctor() {
             <DoctorCard
               key={doctor.id}
               doctor={doctor}
-              onBookAppointment={() => handleBookAppointment(doctor)}
+              onBookAppointment={() => chatData ? handleSendChatToDoctor(doctor) : handleBookAppointment(doctor)}
               onViewProfile={() => navigate(`/patient/doctor-profile/${doctor.id}`)}
+              actionText={chatData ? "Send Chat" : "Book Appointment"}
+              actionVariant={chatData ? "secondary" : "default"}
             />
           ))
         ) : (
           <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-500">No doctors found matching your criteria</p>
+            <p className="text-gray-500">
+              {showOnlyAppointedDoctors 
+                ? "No doctors found with appointments matching your criteria" 
+                : "No doctors found matching your criteria"}
+            </p>
+            {showOnlyAppointedDoctors && (
+              <Button 
+                variant="link" 
+                className="mt-2 text-primary" 
+                onClick={() => setShowOnlyAppointedDoctors(false)}
+              >
+                Show all doctors
+              </Button>
+            )}
           </div>
         )}
       </div>
       
       {/* Booking Dialog */}
       <Dialog open={bookingOpen} onOpenChange={setBookingOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Book Appointment</DialogTitle>
           </DialogHeader>

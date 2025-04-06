@@ -1,4 +1,3 @@
-
 import { useNavigate, useLocation } from "react-router-dom";
 import { Home, Calendar, MessageSquare, User, PlusCircle } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -31,7 +30,7 @@ export default function BottomNavigation() {
     {
       icon: <MessageSquare size={24} />,
       label: "Chat",
-      path: user?.role === "patient" ? `${baseRoute}/ai-assistant` : `${baseRoute}/chat-rooms`,
+      path: user?.role === "patient" ? `${baseRoute}/ai-chat` : `${baseRoute}/chat-rooms`,
     },
     {
       icon: <User size={24} />,

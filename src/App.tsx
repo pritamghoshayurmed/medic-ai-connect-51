@@ -4,9 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Routes, Route, Navigate, useRoutes } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { initializeDatabase, initializeUserTriggers } from "./utils/databaseInit";
-import LoadingIndicator from "./components/LoadingIndicator";
 
 // Error Boundary Components
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -22,10 +21,13 @@ import DoctorDashboard from "./pages/doctor/Dashboard";
 import FindDoctor from "./pages/patient/FindDoctor";
 import Appointments from "./pages/patient/Appointments";
 import Chat from "./pages/Chat";
+import DoctorChat from "./pages/doctor/DoctorChat";
 import AiAssistant from "./pages/patient/AiAssistant";
+import PatientAIChat from "./pages/patient/PatientAIChat";
 import MedicationReminders from "./pages/patient/MedicationReminders";
 import PatientProfile from "./pages/patient/Profile";
 import DoctorProfile from "./pages/doctor/Profile";
+import PatientDoctorProfile from "./pages/patient/DoctorProfile";
 import DoctorAppointments from "./pages/doctor/Appointments";
 import DoctorAnalytics from "./pages/doctor/Analytics";
 import DiagnosisEngine from "./pages/doctor/DiagnosisEngine";
@@ -45,7 +47,7 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode;
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
-    return <LoadingIndicator message="Verifying authentication..." fullScreen={true} />;
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
 
   if (!user || !allowedRoles.includes(user.role)) {
@@ -57,55 +59,24 @@ const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode;
 };
 
 function AppWithAuth() {
-  const [initComplete, setInitComplete] = useState(false);
-  const [initError, setInitError] = useState<string | null>(null);
-  
   // Initialize the database on app startup
   useEffect(() => {
-    let isMounted = true;
-    const timeoutId = setTimeout(() => {
-      // If initialization takes too long, proceed anyway to prevent infinite loading
-      if (isMounted && !initComplete) {
-        console.log("Database initialization timeout - proceeding with app startup");
-        setInitComplete(true);
-      }
-    }, 5000); // 5 second timeout
-    
     const init = async () => {
       try {
         await initializeDatabase();
         await initializeUserTriggers();
-        if (isMounted) setInitComplete(true);
       } catch (error) {
         console.error("Error initializing database:", error);
-        if (isMounted) {
-          setInitError("Database initialization failed. Some features may not work properly.");
-          setInitComplete(true); // Still mark as complete to avoid blocking the app
-        }
       }
     };
     
     init();
-    
-    return () => {
-      isMounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, [initComplete]);
-  
-  if (!initComplete) {
-    return <LoadingIndicator message="Initializing application..." fullScreen={true} />;
-  }
+  }, []);
   
   return (
     <>
       <Toaster />
       <Sonner />
-      {initError && (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 fixed top-0 right-0 left-0 z-50">
-          <p>{initError}</p>
-        </div>
-      )}
       <ErrorBoundary>
         <Routes>
           {/* Public routes */}
@@ -160,6 +131,15 @@ function AppWithAuth() {
             errorElement={<PageErrorBoundary />}
           />
           <Route
+            path="/patient/ai-chat"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <PatientAIChat />
+              </ProtectedRoute>
+            }
+            errorElement={<PageErrorBoundary />}
+          />
+          <Route
             path="/patient/medications"
             element={
               <ProtectedRoute allowedRoles={['patient']}>
@@ -173,6 +153,15 @@ function AppWithAuth() {
             element={
               <ProtectedRoute allowedRoles={['patient']}>
                 <PatientProfile />
+              </ProtectedRoute>
+            }
+            errorElement={<PageErrorBoundary />}
+          />
+          <Route
+            path="/patient/doctor-profile/:id"
+            element={
+              <ProtectedRoute allowedRoles={['patient']}>
+                <PatientDoctorProfile />
               </ProtectedRoute>
             }
             errorElement={<PageErrorBoundary />}
@@ -230,7 +219,7 @@ function AppWithAuth() {
             path="/doctor/chat/:id"
             element={
               <ProtectedRoute allowedRoles={['doctor']}>
-                <Chat />
+                <DoctorChat />
               </ProtectedRoute>
             }
             errorElement={<PageErrorBoundary />}

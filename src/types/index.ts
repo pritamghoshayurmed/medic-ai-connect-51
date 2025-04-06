@@ -1,4 +1,3 @@
-
 export type UserRole = 'patient' | 'doctor';
 
 export interface User {
@@ -97,6 +96,7 @@ export interface Appointment {
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
   reason?: string;
   notes?: string;
+  doctorName?: string;
 }
 
 export interface MedicalReport {

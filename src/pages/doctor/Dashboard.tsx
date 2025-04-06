@@ -382,7 +382,7 @@ export default function DoctorDashboard() {
                     key={appointment.id}
                     appointment={appointment}
                     person={appointment.patient}
-                    onChat={() => navigate(`/chat/${appointment.patientId}`)}
+                    onChat={() => navigate(`/doctor/chat/${appointment.patientId}`)}
                   />
                   {appointment.status === "pending" && (
                     <div className="flex gap-2 mt-2">
@@ -434,7 +434,7 @@ export default function DoctorDashboard() {
                     key={appointment.id}
                     appointment={appointment}
                     person={appointment.patient}
-                    onChat={() => navigate(`/chat/${appointment.patientId}`)}
+                    onChat={() => navigate(`/doctor/chat/${appointment.patientId}`)}
                   />
                   {appointment.status === "pending" && (
                     <div className="flex gap-2 mt-2">

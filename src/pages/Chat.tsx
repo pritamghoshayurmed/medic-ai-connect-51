@@ -8,17 +8,26 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Card, CardContent } from "@/components/ui/card";
 import { Message } from "@/types";
 import { format } from "date-fns";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, Send, Image as ImageIcon, X } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+
+interface ExtendedMessage extends Message {
+  imageUrl?: string;
+}
 
 export default function Chat() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { toast } = useToast();
+  const [messages, setMessages] = useState<ExtendedMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [otherUser, setOtherUser] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -75,13 +84,14 @@ export default function Chat() {
           );
           
           // Convert to our Message type
-          const typedMessages: Message[] = filteredMessages.map(msg => ({
+          const typedMessages: ExtendedMessage[] = filteredMessages.map(msg => ({
             id: msg.id,
             sender_id: msg.sender_id,
             receiver_id: msg.receiver_id,
             content: msg.content,
             timestamp: msg.timestamp,
-            read: msg.read
+            read: msg.read,
+            imageUrl: msg.image_url
           }));
           
           setMessages(typedMessages);
@@ -107,23 +117,45 @@ export default function Chat() {
 
     fetchMessages();
     
-    // Set up real-time subscription for new messages
+    // Set up real-time subscription for new messages - listen for ALL messages in this conversation
     const subscription = supabase
-      .channel('public:messages')
+      .channel('general-chat')
       .on('postgres_changes', { 
         event: 'INSERT', 
         schema: 'public', 
-        table: 'messages',
-        filter: `sender_id=eq.${id},receiver_id=eq.${user.id}`
+        table: 'messages'
       }, (payload) => {
-        const newMsg = payload.new as Message;
-        setMessages(prev => [...prev, newMsg]);
+        const newMsg = payload.new;
         
-        // Mark as read immediately
-        supabase
-          .from('messages')
-          .update({ read: true })
-          .eq('id', newMsg.id);
+        // Only process messages relevant to this conversation
+        if ((newMsg.sender_id === user.id && newMsg.receiver_id === id) || 
+            (newMsg.sender_id === id && newMsg.receiver_id === user.id)) {
+          
+          // Format to match our message structure
+          const formattedMsg: ExtendedMessage = {
+            id: newMsg.id,
+            sender_id: newMsg.sender_id,
+            receiver_id: newMsg.receiver_id,
+            content: newMsg.content,
+            timestamp: newMsg.timestamp,
+            read: newMsg.read,
+            imageUrl: newMsg.image_url
+          };
+          
+          // Add to messages if not already there
+          setMessages(prev => {
+            if (prev.some(msg => msg.id === formattedMsg.id)) return prev;
+            return [...prev, formattedMsg];
+          });
+          
+          // Mark as read if we're the receiver
+          if (newMsg.receiver_id === user.id && !newMsg.read) {
+            supabase
+              .from('messages')
+              .update({ read: true })
+              .eq('id', newMsg.id);
+          }
+        }
       })
       .subscribe();
       
@@ -138,29 +170,97 @@ export default function Chat() {
   }, [messages]);
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !user || !id) return;
+    if ((!newMessage.trim() && !selectedImage) || !user || !id) return;
     
     try {
+      let imageUrl = undefined;
+      const timestamp = new Date().toISOString();
+      const tempMessageId = `temp-${Date.now()}`;
+      
+      // If there's an image, upload it first
+      if (selectedImage) {
+        setUploadingImage(true);
+        
+        const fileName = `${user.id}_${Date.now()}_${selectedImage.name}`;
+        const { data: fileData, error: uploadError } = await supabase.storage
+          .from('message_images')
+          .upload(fileName, selectedImage);
+          
+        if (uploadError) {
+          throw uploadError;
+        }
+        
+        // Get public URL for the uploaded image
+        const { data: urlData } = await supabase.storage
+          .from('message_images')
+          .getPublicUrl(fileName);
+          
+        imageUrl = urlData.publicUrl;
+        setUploadingImage(false);
+      }
+      
+      // Add message to local state immediately
+      const optimisticMessage: ExtendedMessage = {
+        id: tempMessageId,
+        sender_id: user.id,
+        receiver_id: id,
+        content: newMessage,
+        timestamp: timestamp,
+        read: false,
+        imageUrl: imageUrl
+      };
+      
+      // Update UI immediately with optimistic update
+      setMessages(prev => [...prev, optimisticMessage]);
+      
+      // Clear the input and remove selected image
+      setNewMessage("");
+      setSelectedImage(null);
+      
+      // Then send to database
       const message = {
         sender_id: user.id,
         receiver_id: id,
         content: newMessage,
-        read: false
+        timestamp: timestamp,
+        read: false,
+        image_url: imageUrl
       };
       
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('messages')
-        .insert(message);
+        .insert(message)
+        .select();
         
       if (error) {
         console.error("Error sending message:", error);
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
+        toast({
+          title: "Error",
+          description: "Failed to send message. Please try again.",
+          variant: "destructive",
+        });
         return;
       }
       
-      // Clear the input
-      setNewMessage("");
+      // Replace the temporary message with the real one
+      if (data && data[0]) {
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempMessageId 
+            ? { ...data[0], imageUrl: data[0].image_url } 
+            : msg
+        ));
+      }
+      
     } catch (err) {
       console.error("Error sending message:", err);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive",
+      });
+      setUploadingImage(false);
     }
   };
 
@@ -172,9 +272,46 @@ export default function Chat() {
   };
 
   const goBack = () => {
-    // Updated paths to match the format in App.tsx
     const path = user?.role === 'doctor' ? '/doctor/chat-rooms' : '/patient';
     navigate(path);
+  };
+  
+  const handleImageClick = () => {
+    fileInputRef.current?.click();
+  };
+  
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check if file is an image
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file (JPEG, PNG, etc.)",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select an image smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setSelectedImage(file);
+  };
+  
+  const removeSelectedImage = () => {
+    setSelectedImage(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   if (loading) {
@@ -210,6 +347,15 @@ export default function Chat() {
             <div key={message.id} className={`flex ${isFromMe ? 'justify-end' : 'justify-start'}`}>
               <Card className={`max-w-[80%] ${isFromMe ? 'bg-primary text-primary-foreground' : 'bg-gray-100'}`}>
                 <CardContent className="p-3">
+                  {message.imageUrl && (
+                    <div className="mb-2">
+                      <img 
+                        src={message.imageUrl} 
+                        alt="Shared image" 
+                        className="rounded-md max-w-full max-h-64 object-contain" 
+                      />
+                    </div>
+                  )}
                   <p className="text-sm">{message.content}</p>
                   <p className={`text-xs mt-1 ${isFromMe ? 'text-primary-foreground/70' : 'text-gray-500'}`}>
                     {format(new Date(message.timestamp), 'p')}
@@ -222,9 +368,45 @@ export default function Chat() {
         <div ref={messagesEndRef} />
       </div>
       
+      {/* Selected image preview */}
+      {selectedImage && (
+        <div className="p-2 bg-gray-100 border-t flex items-center">
+          <div className="relative mr-2">
+            <img 
+              src={URL.createObjectURL(selectedImage)} 
+              alt="Preview" 
+              className="h-16 w-16 object-cover rounded"
+            />
+            <button 
+              className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+              onClick={removeSelectedImage}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <p className="text-sm text-gray-600 flex-1 truncate">{selectedImage.name}</p>
+        </div>
+      )}
+      
       {/* Message input */}
       <div className="border-t p-3 bg-white">
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="icon" 
+            type="button" 
+            onClick={handleImageClick}
+            className="flex-shrink-0"
+          >
+            <ImageIcon className="h-4 w-4" />
+          </Button>
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept="image/*"
+            className="hidden"
+          />
           <Textarea
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
@@ -234,11 +416,15 @@ export default function Chat() {
           />
           <Button 
             onClick={sendMessage} 
-            disabled={!newMessage.trim()} 
+            disabled={(!newMessage.trim() && !selectedImage) || uploadingImage} 
             className="flex-shrink-0"
             type="submit"
           >
-            <Send className="h-4 w-4" />
+            {uploadingImage ? (
+              <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
           </Button>
         </div>
       </div>

@@ -8,4 +8,43 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
+// Create typed supabase client
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+// For when we need the raw client without type checking
+export const rawSupabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+// Create ai_chat_history table if it doesn't exist
+export const createAIChatHistoryTable = async () => {
+  try {
+    // Check if the table exists by trying to select from it
+    const { error: checkError } = await rawSupabase
+      .from('ai_chat_history')
+      .select('id')
+      .limit(1);
+    
+    // Create the table if it doesn't exist
+    if (checkError && checkError.message.includes('relation "ai_chat_history" does not exist')) {
+      console.log('Creating AI Chat History table...');
+      
+      // We need to use SQL for table creation
+      const { error } = await rawSupabase.rpc('create_ai_chat_history_table', {});
+      
+      if (error) {
+        console.error('Error creating AI Chat History table:', error);
+      } else {
+        console.log('AI Chat History table created successfully');
+      }
+    }
+  } catch (error) {
+    console.error('Error during AI Chat History setup:', error);
+  }
+};
+
+// Call this function when the app initializes
+createAIChatHistoryTable();
+
+// Initialize the AI chat history table and run a check to ensure it exists
+setTimeout(() => {
+  createAIChatHistoryTable();
+}, 500);

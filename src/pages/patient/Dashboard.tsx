@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -11,10 +10,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Appointment, Doctor } from "@/types";
 import { format } from "date-fns";
 
+interface ExtendedAppointment extends Appointment {
+  doctorName?: string;
+}
+
 export default function PatientDashboard() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [upcomingAppointments, setUpcomingAppointments] = useState<Appointment[]>([]);
+  const [upcomingAppointments, setUpcomingAppointments] = useState<ExtendedAppointment[]>([]);
   const [recommendedDoctors, setRecommendDoctors] = useState<Doctor[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -23,18 +26,17 @@ export default function PatientDashboard() {
 
     const fetchData = async () => {
       try {
-        // Fetch appointments
+        // Fetch appointments using a simplified query
         const { data: appointmentsData, error: appointmentsError } = await supabase
           .from('appointments')
           .select(`
-            *,
-            doctor:doctor_id (
-              id,
-              full_name,
-              email,
-              phone,
-              role
-            )
+            id, 
+            patient_id,
+            doctor_id,
+            appointment_date,
+            appointment_time,
+            status,
+            symptoms
           `)
           .eq('patient_id', user.id)
           .order('appointment_date', { ascending: true })
@@ -42,7 +44,28 @@ export default function PatientDashboard() {
 
         if (appointmentsError) {
           console.error("Error fetching appointments:", appointmentsError);
-        } else if (appointmentsData) {
+        } else if (appointmentsData && appointmentsData.length > 0) {
+          // Get unique doctor IDs
+          const doctorIds = [...new Set(appointmentsData.map(appt => appt.doctor_id))];
+          
+          // Fetch doctor details separately if needed
+          const { data: doctorsData, error: doctorsError } = await supabase
+            .from('profiles')
+            .select('id, full_name')
+            .in('id', doctorIds);
+            
+          if (doctorsError) {
+            console.error("Error fetching doctor details:", doctorsError);
+          }
+          
+          // Create a map of doctor names
+          const doctorNameMap = new Map();
+          if (doctorsData) {
+            doctorsData.forEach(doc => {
+              doctorNameMap.set(doc.id, doc.full_name);
+            });
+          }
+          
           // Transform data to match our Appointment interface
           const today = new Date();
           const formattedAppointments = appointmentsData
@@ -54,7 +77,8 @@ export default function PatientDashboard() {
               date: appt.appointment_date,
               time: appt.appointment_time,
               status: (appt.status || 'pending') as "pending" | "confirmed" | "cancelled" | "completed",
-              reason: appt.symptoms || ''
+              reason: appt.symptoms || '',
+              doctorName: doctorNameMap.get(appt.doctor_id) || 'Dr. Unknown'
             }))
             .slice(0, 2); // Just get the first 2 upcoming appointments
           
@@ -117,16 +141,13 @@ export default function PatientDashboard() {
   return (
     <div className="pb-24">
       {/* Header */}
-      <div className="bg-primary p-6 text-white rounded-b-3xl">
+      <div className="bg-primary text-white p-4 pb-12 rounded-b-3xl">
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-xl font-bold">Hello, {user?.name?.split(' ')[0] || 'Patient'}!</h1>
-            <p className="text-sm opacity-90">{format(new Date(), "EEEE, MMMM d")}</p>
+            <h1 className="text-2xl font-bold">Hello, {user?.name || 'there'}!</h1>
+            <p className="text-white/80">{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
           </div>
           <div className="flex space-x-2">
-            <Button variant="ghost" size="icon" className="text-white" onClick={() => navigate("/patient/profile")}>
-              <UserRound />
-            </Button>
             <Button variant="ghost" size="icon" className="text-white">
               <Bell />
             </Button>
@@ -136,7 +157,11 @@ export default function PatientDashboard() {
           <Button onClick={() => navigate("/patient/find-doctor")} className="bg-white text-primary hover:bg-gray-100 flex-1">
             Find Doctor
           </Button>
-          <Button onClick={() => navigate("/patient/appointments")} variant="outline" className="border-white text-white hover:bg-primary/90 flex-1">
+          <Button 
+            onClick={() => navigate("/patient/appointments")} 
+            variant="secondary"
+            className="bg-white/90 text-primary hover:bg-white flex-1"
+          >
             Appointments
           </Button>
         </div>
@@ -167,7 +192,7 @@ export default function PatientDashboard() {
               appointment={appointment}
               person={{
                 id: appointment.doctorId,
-                name: "Dr. Smith",
+                name: appointment.doctorName || "Dr. Unknown",
                 email: "doctor@example.com",
                 phone: "",
                 role: "doctor",

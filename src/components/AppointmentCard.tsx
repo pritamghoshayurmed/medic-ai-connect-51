@@ -1,4 +1,3 @@
-
 import { Appointment, Doctor, Patient } from "@/types";
 import { Button } from "@/components/ui/button";
 import { CalendarClock, Video, MessageSquare } from "lucide-react";
@@ -64,7 +63,7 @@ export default function AppointmentCard({
     if (onChat) {
       onChat();
     } else {
-      navigate(`/chat/${isDoctor ? appointment.patientId : appointment.doctorId}`);
+      navigate(`${isDoctor ? '/doctor/chat/' : '/patient/chat/'}${isDoctor ? appointment.patientId : appointment.doctorId}`);
     }
   };
 

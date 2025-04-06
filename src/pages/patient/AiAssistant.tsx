@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Send, Bot, X, Image, MessageSquare } from "lucide-react";
+import { ChevronLeft, Send, Bot, X, Image, MessageSquare, Share2, User } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +11,8 @@ import { askMedicalQuestion, analyzeImage } from "@/services/doctorAiService";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ImageUploader from "@/components/ImageUploader";
 import AnalysisResults from "@/components/AnalysisResults";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Message {
   id: number;
@@ -46,6 +48,106 @@ export default function AiAssistant() {
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState("chat");
+  
+  // Share dialog state
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
+  const [availableDoctors, setAvailableDoctors] = useState<any[]>([]);
+  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  
+  // Load doctors for sharing
+  const fetchDoctors = async () => {
+    if (loadingDoctors) return;
+    
+    try {
+      setLoadingDoctors(true);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          *,
+          doctor_profiles(*)
+        `)
+        .eq('role', 'doctor');
+        
+      if (error) {
+        console.error("Error fetching doctors:", error);
+        throw error;
+      }
+      
+      setAvailableDoctors(data.map(doc => ({
+        id: doc.id,
+        name: doc.full_name || 'Dr. Unknown',
+        specialty: doc.doctor_profiles?.[0]?.specialty || 'General Practitioner',
+        profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
+      })));
+    } catch (error) {
+      console.error("Error:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load doctors",
+        variant: "destructive"
+      });
+    } finally {
+      setLoadingDoctors(false);
+    }
+  };
+  
+  // Share summary with doctor
+  const handleShareWithDoctor = async () => {
+    if (!selectedDoctorId) {
+      toast({
+        title: "No doctor selected",
+        description: "Please select a doctor to share with.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    try {
+      let summaryContent = '';
+      
+      if (activeTab === 'chat') {
+        // Create a summary from the chat
+        const userMessages = messages.filter(m => m.isUser).map(m => m.content);
+        const aiResponses = messages.filter(m => !m.isUser).map(m => m.content);
+        
+        summaryContent = `Chat Summary:\n\nUser Questions:\n${userMessages.join('\n')}\n\nAI Responses:\n${aiResponses.join('\n')}`;
+      } else if (activeTab === 'image' && analysisResult) {
+        // Create a summary from the image analysis
+        summaryContent = `Image Analysis Results:\n\n${analysisResult.description}\n\nPossible Conditions: ${analysisResult.conditions.join(', ')}\n\nRecommendations: ${analysisResult.recommendations.join(', ')}`;
+      }
+      
+      // Send message to the doctor with the summary
+      await supabase
+        .from('messages')
+        .insert({
+          sender_id: user?.id,
+          receiver_id: selectedDoctorId,
+          content: summaryContent,
+          read: false
+        });
+      
+      toast({
+        title: "Summary shared",
+        description: "The summary has been shared with the selected doctor.",
+      });
+      
+      setShareDialogOpen(false);
+    } catch (error) {
+      console.error("Error sharing summary:", error);
+      toast({
+        title: "Error",
+        description: "Failed to share summary with doctor",
+        variant: "destructive"
+      });
+    }
+  };
+  
+  // Open share dialog and load doctors
+  const openShareDialog = () => {
+    fetchDoctors();
+    setShareDialogOpen(true);
+  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -144,9 +246,9 @@ export default function AiAssistant() {
             <MessageSquare className="h-4 w-4" />
             <span>Chat</span>
           </TabsTrigger>
-          <TabsTrigger value="image" className="flex items-center gap-1">
-            <Image className="h-4 w-4" />
-            <span>Image Analysis</span>
+          <TabsTrigger value="doctor" className="flex items-center gap-1">
+            <User className="h-4 w-4" />
+            <span>Chat with Doctor</span>
           </TabsTrigger>
         </TabsList>
         
@@ -226,37 +328,106 @@ export default function AiAssistant() {
                 <Send className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-gray-500 text-center mt-2">
-              This AI assistant uses Google's Gemini AI to provide medical information. Always consult a healthcare professional for medical advice.
-            </p>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="image" className="flex-1 overflow-y-auto p-4">
-          {!analysisResult ? (
-            <div className="h-full flex flex-col items-center justify-center">
-              <ImageUploader onUpload={handleImageUpload} isLoading={isAnalyzing} />
-              <p className="text-sm text-gray-500 mt-4 text-center max-w-md">
-                Upload a medical image for AI analysis. This can include X-rays, skin conditions, rashes, or other visible medical conditions.
+            <div className="flex justify-between items-center mt-2">
+              <p className="text-xs text-gray-500">
+                This AI assistant uses Google's Gemini AI to provide medical information. Always consult a healthcare professional for medical advice.
               </p>
-            </div>
-          ) : (
-            <div>
-              <div className="mb-4 flex justify-between">
-                <h3 className="text-lg font-semibold">Analysis Results</h3>
+              {messages.length > 1 && (
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  onClick={() => setAnalysisResult(null)}
+                  onClick={openShareDialog}
+                  className="ml-2 whitespace-nowrap flex-shrink-0"
                 >
-                  <X className="h-4 w-4 mr-1" /> Clear
+                  <Share2 className="h-4 w-4 mr-1" /> Share with Doctor
+                </Button>
+              )}
+            </div>
+          </div>
+        </TabsContent>
+        
+        <TabsContent value="doctor" className="flex-1 overflow-y-auto p-4">
+          <div className="h-full flex flex-col items-center justify-center">
+            <div className="text-center max-w-md space-y-4">
+              <div className="p-3 mx-auto bg-primary/10 rounded-full w-16 h-16 flex items-center justify-center">
+                <User className="h-8 w-8 text-primary" />
+              </div>
+              <h3 className="text-lg font-medium">Connect with a Doctor</h3>
+              <p className="text-sm text-gray-500">
+                Chat with a healthcare professional about your symptoms, get medical advice, or schedule an appointment.
+              </p>
+              <div className="space-y-2">
+                <Button 
+                  className="w-full"
+                  onClick={() => navigate('/patient/find-doctor')}
+                >
+                  Find a Doctor
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="w-full bg-gray-50 text-primary border-primary hover:bg-gray-100"
+                  onClick={() => navigate('/patient/appointments')}
+                >
+                  My Appointments
                 </Button>
               </div>
-              <AnalysisResults analysis={analysisResult} />
             </div>
-          )}
+          </div>
         </TabsContent>
       </Tabs>
+      
+      {/* Share with Doctor Dialog */}
+      <Dialog open={shareDialogOpen} onOpenChange={setShareDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share with Doctor</DialogTitle>
+          </DialogHeader>
+          
+          <div className="py-4">
+            <h3 className="mb-3 font-medium">Select a doctor:</h3>
+            {loadingDoctors ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-primary"></div>
+              </div>
+            ) : (
+              <div className="max-h-60 overflow-y-auto space-y-2">
+                {availableDoctors.map(doctor => (
+                  <div 
+                    key={doctor.id}
+                    className={`p-3 rounded-md border cursor-pointer hover:bg-gray-50 ${selectedDoctorId === doctor.id ? 'bg-primary/10 border-primary' : ''}`}
+                    onClick={() => setSelectedDoctorId(doctor.id)}
+                  >
+                    <div className="flex items-center gap-3">
+                      {doctor.profilePic ? (
+                        <img src={doctor.profilePic} alt={doctor.name} className="w-10 h-10 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                          <User className="h-6 w-6 text-primary" />
+                        </div>
+                      )}
+                      <div>
+                        <p className="font-medium">{doctor.name}</p>
+                        <p className="text-sm text-gray-500">{doctor.specialty}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {availableDoctors.length === 0 && (
+                  <p className="text-center text-gray-500 py-4">No doctors available</p>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShareDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleShareWithDoctor} disabled={!selectedDoctorId || loadingDoctors}>
+              Share Summary
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       <BottomNavigation />
     </div>

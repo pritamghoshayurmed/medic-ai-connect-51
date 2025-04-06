@@ -17,13 +17,13 @@ const initialAnalysisHistory = [
     date: new Date("2023-06-01").getTime(),
     findings: [
       "No acute cardiopulmonary process",
-      "Heart size is normal",
+      "Heart size is normal", 
       "Lungs are clear without consolidation",
     ],
     analysis: "Normal chest X-ray with no abnormalities detected.",
   },
   {
-    id: "2",
+    id: "2", 
     filename: "brain-mri-002.jpg",
     date: new Date("2023-06-15").getTime(),
     findings: [
@@ -62,6 +62,34 @@ function getGeminiClient() {
   return new GoogleGenerativeAI(apiKey);
 }
 
+// Format AI response text into sections
+function formatAIResponse(text: string): string {
+  // Split response into sections
+  const sections = text.split(/\n(?=[A-Z][A-Za-z\s]+:)/);
+  
+  let formattedText = '';
+  
+  sections.forEach(section => {
+    // Extract section title and content
+    const matches = section.match(/^([A-Za-z\s]+):\s*(.*)$/s);
+    if (matches) {
+      const [_, title, content] = matches;
+      formattedText += `<div class="ai-section">
+        <h3 class="section-title">${title}</h3>
+        <div class="section-content">
+          ${content.trim().split('\n').map(line => 
+            `<p>${line.trim()}</p>`
+          ).join('')}
+        </div>
+      </div>`;
+    } else {
+      formattedText += `<p>${section.trim()}</p>`;
+    }
+  });
+
+  return formattedText;
+}
+
 // Utility function to make direct API calls to Gemini
 export async function callGeminiDirectly(prompt: string, includeImage?: { mimeType: string, data: string }): Promise<string> {
   const apiKey = getGeminiApiKey();
@@ -97,7 +125,8 @@ export async function callGeminiDirectly(prompt: string, includeImage?: { mimeTy
       }
     );
     
-    return response.data.candidates[0].content.parts[0].text;
+    const rawText = response.data.candidates[0].content.parts[0].text;
+    return formatAIResponse(rawText);
   } catch (error: any) {
     console.error('Error calling Gemini API directly:', error);
     if (error.response) {
@@ -345,62 +374,22 @@ export const generateHeatmap = async (analysisId: string, imageFile: File): Prom
 };
 
 /**
- * Fetch related literature from PubMed based on findings
+ * Fetch related medical literature based on findings
  */
 export async function fetchRelatedLiterature(findings: string[]): Promise<any[]> {
   try {
-    // Extract keywords from findings for better search results
+    // Extract keywords from findings
     const keywords = extractKeywords(findings.join(' '));
-    const searchTerms = keywords.join('+OR+');
     
-    // Use PubMed API to fetch related literature
-    const baseUrl = 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils';
-    const searchUrl = `${baseUrl}/esearch.fcgi?db=pubmed&term=${searchTerms}&retmode=json&retmax=10`;
+    // In a real implementation, this would call an API like PubMed
+    // Using the approach from utils_simple.py
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
-    console.log('Fetching PubMed articles for terms:', searchTerms);
+    // Simulate API call delay
+    await delay(1500);
     
-    // First, search for article IDs
-    const searchResponse = await axios.get(searchUrl);
-    const idList = searchResponse.data.esearchresult.idlist;
-    
-    if (idList.length === 0) {
-      console.log('No PubMed articles found for the given terms');
-      return [];
-    }
-    
-    // Then, fetch details for these IDs
-    const summaryUrl = `${baseUrl}/esummary.fcgi?db=pubmed&id=${idList.join(',')}&retmode=json`;
-    const summaryResponse = await axios.get(summaryUrl);
-    const result = summaryResponse.data.result;
-    
-    // Format the response
-    const literature = idList.map(id => {
-      const article = result[id];
-      if (!article) return null;
-      
-      // Extract authors (first 3)
-      const authors = article.authors?.map((author: any) => author.name).slice(0, 3).join(', ');
-      const authorDisplay = authors ? (authors + (article.authors?.length > 3 ? ', et al.' : '')) : 'Unknown authors';
-      
-      return {
-        id: id,
-        title: article.title || 'Untitled article',
-        authors: authorDisplay,
-        journal: article.fulljournalname || article.source || 'Unknown journal',
-        year: article.pubdate ? parseInt(article.pubdate.substring(0, 4)) : new Date().getFullYear(),
-        abstract: article.abstract || 'Abstract not available',
-        url: `https://pubmed.ncbi.nlm.nih.gov/${id}/`,
-        keywords: keywords.slice(0, 5)
-      };
-    }).filter(item => item !== null);
-    
-    return literature;
-  } catch (error) {
-    console.error('Error fetching related literature:', error);
-    // Fallback to mock data if API fails
-    console.log('Falling back to mock literature data');
-    const keywords = extractKeywords(findings.join(' '));
-    return keywords.slice(0, 3).map((keyword, index) => {
+    // Create mock response based on the keywords
+    const literature = keywords.slice(0, 3).map((keyword, index) => {
       return {
         id: `PMID${1000000 + index}`,
         title: `Recent advances in ${keyword} diagnosis and treatment`,
@@ -412,83 +401,31 @@ export async function fetchRelatedLiterature(findings: string[]): Promise<any[]>
         keywords: [keyword, ...keywords.filter(k => k !== keyword).slice(0, 2)]
       };
     });
+    
+    return literature;
+  } catch (error) {
+    console.error('Error fetching related literature:', error);
+    throw new Error('Failed to fetch related medical literature');
   }
 }
 
 /**
- * Fetch related clinical trials from ClinicalTrials.gov based on findings
+ * Fetch related clinical trials based on findings
  */
 export async function fetchRelatedClinicalTrials(findings: string[]): Promise<any[]> {
   try {
-    // Extract keywords from findings for better search results
+    // Extract keywords from findings
     const keywords = extractKeywords(findings.join(' '));
-    const searchTerms = keywords.join('+OR+');
     
-    // Use ClinicalTrials.gov API to fetch related trials
-    const baseUrl = 'https://clinicaltrials.gov/api/query/study_fields';
-    const fields = [
-      'NCTId', 'BriefTitle', 'OfficialTitle', 'OverallStatus', 
-      'Phase', 'Condition', 'LocationFacility', 'ConditionMeshTerm'
-    ].join(',');
+    // In a real implementation, this would call the ClinicalTrials.gov API
+    // Using the approach from utils_simple.py
+    const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
     
-    const url = `${baseUrl}?expr=${searchTerms}&fields=${fields}&fmt=json&max_rnk=10`;
+    // Simulate API call delay
+    await delay(1000);
     
-    console.log('Fetching clinical trials for terms:', searchTerms);
-    
-    const response = await axios.get(url);
-    const studyFields = response.data.StudyFieldsResponse.StudyFields;
-    
-    if (!studyFields || studyFields.length === 0) {
-      console.log('No clinical trials found for the given terms');
-      return [];
-    }
-    
-    // Format the response
-    const trials = studyFields.map((trial: any) => {
-      // Get the first NCTId if there are multiple
-      const nctId = Array.isArray(trial.NCTId) ? trial.NCTId[0] : trial.NCTId;
-      
-      // Use official title if available, otherwise brief title
-      const title = Array.isArray(trial.OfficialTitle) && trial.OfficialTitle.length > 0 
-        ? trial.OfficialTitle[0] 
-        : (Array.isArray(trial.BriefTitle) ? trial.BriefTitle[0] : 'Untitled trial');
-      
-      // Get status
-      const status = Array.isArray(trial.OverallStatus) ? trial.OverallStatus[0] : 'Unknown status';
-      
-      // Get phase
-      const phase = Array.isArray(trial.Phase) && trial.Phase.length > 0 
-        ? trial.Phase[0] 
-        : 'Not specified';
-      
-      // Get conditions
-      const conditions = Array.isArray(trial.Condition) 
-        ? trial.Condition.slice(0, 3) 
-        : (Array.isArray(trial.ConditionMeshTerm) ? trial.ConditionMeshTerm.slice(0, 3) : ['Not specified']);
-      
-      // Get location
-      const location = Array.isArray(trial.LocationFacility) && trial.LocationFacility.length > 0
-        ? trial.LocationFacility[0]
-        : 'Multiple Locations';
-      
-      return {
-        id: nctId,
-        title: title,
-        status: status,
-        phase: phase,
-        conditions: conditions,
-        location: location,
-        url: `https://clinicaltrials.gov/ct2/show/${nctId}`
-      };
-    });
-    
-    return trials;
-  } catch (error) {
-    console.error('Error fetching clinical trials:', error);
-    // Fallback to mock data if API fails
-    console.log('Falling back to mock clinical trials data');
-    const keywords = extractKeywords(findings.join(' '));
-    return keywords.slice(0, 2).map((keyword, index) => {
+    // Create mock response based on the keywords
+    const trials = keywords.slice(0, 2).map((keyword, index) => {
       return {
         id: `NCT${10000000 + index}`,
         title: `${keyword.charAt(0).toUpperCase() + keyword.slice(1)} Diagnostic Study Using AI`,
@@ -499,6 +436,11 @@ export async function fetchRelatedClinicalTrials(findings: string[]): Promise<an
         url: `https://clinicaltrials.gov/ct2/show/NCT${10000000 + index}`
       };
     });
+    
+    return trials;
+  } catch (error) {
+    console.error('Error fetching clinical trials:', error);
+    throw new Error('Failed to fetch related clinical trials');
   }
 }
 
