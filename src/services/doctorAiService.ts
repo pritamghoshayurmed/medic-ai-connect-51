@@ -37,20 +37,29 @@ const initialAnalysisHistory = [
 
 // Function to get the current Gemini API key
 export function getGeminiApiKey(): string {
-  // Use hardcoded key for this implementation
+  // Check environment variable first (Vite exposes these with import.meta.env)
+  const envKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (envKey && envKey !== 'your-gemini-api-key') {
+    console.log('Using Gemini API key from environment');
+    return envKey;
+  }
+  
+  // Hardcoded key for development - should be replaced in production
   const hardcodedKey = 'AIzaSyAgsGk0-pnK61i2x5Gusf0qnSfUotWgx-U';
   if (hardcodedKey) {
+    console.log('Using hardcoded Gemini API key (not recommended for production)');
     return hardcodedKey;
   }
   
-  // Check localStorage
+  // Check localStorage as last resort
   const localStorageKey = localStorage.getItem(LOCAL_STORAGE_API_KEY);
   if (localStorageKey && localStorageKey !== 'your-gemini-api-key') {
+    console.log('Using Gemini API key from localStorage');
     return localStorageKey;
   }
   
-  // Fall back to environment variable
-  return ENV_GEMINI_API_KEY;
+  console.warn('No valid Gemini API key found!');
+  return '';
 }
 
 // Function to initialize Gemini client with the current API key
