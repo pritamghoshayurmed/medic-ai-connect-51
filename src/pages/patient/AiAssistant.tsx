@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +36,9 @@ export default function AiAssistant() {
     }
   ]);
   const [isTyping, setIsTyping] = useState(false);
+  const [chatHistoryId, setChatHistoryId] = useState<string | null>(null);
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // Added isSaving state
   const [suggestions] = useState([
     "I have a headache",
     "My throat hurts",
@@ -48,6 +51,157 @@ export default function AiAssistant() {
   const [analysisResult, setAnalysisResult] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeTab, setActiveTab] = useState("chat");
+
+  useEffect(() => {
+    const fetchChatHistory = async () => {
+      if (user && user.id) {
+        try {
+          const { data, error } = await supabase
+            .from("ai_chat_history")
+            .select("id, messages") // Select id along with messages
+            .eq("user_id", user.id)
+            .order("updated_at", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (error && error.code !== 'PGRST116') {
+            throw error;
+          }
+
+          if (data && data.messages) {
+            if (typeof data.id === 'string' && data.id.length > 0) {
+              setChatHistoryId(data.id); // Store the loaded record's ID
+            } else {
+              console.warn("Fetched chat history record has invalid or missing ID. Setting chatHistoryId to null.", data);
+              setChatHistoryId(null);
+            }
+            const historyMessages = (data.messages as Array<{ role: string, content: string, timestamp: string }>).map(
+              (msg, index) => ({
+                id: Date.now() + index, 
+                content: msg.content,
+                isUser: msg.role === "user",
+                timestamp: new Date(msg.timestamp),
+              })
+            );
+            if (historyMessages.length > 0) {
+              setMessages(historyMessages);
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching chat history:", err);
+          toast({
+            title: "Error",
+            description: "Could not load previous chat history.",
+            variant: "destructive",
+          });
+        } finally {
+          setIsHistoryLoaded(true); // Indicate loading process completed
+        }
+      } else {
+        setIsHistoryLoaded(true); // Also set if no user, to unblock saving logic if needed (e.g. guest mode later)
+      }
+    };
+
+    fetchChatHistory();
+  }, [user, toast]);
+
+  const saveChatHistory = useCallback(async (
+    messagesToSave: Message[], 
+    currentHistoryIdFromCaller: string | null
+  ): Promise<string | null> => {
+    if (!user || !user.id) {
+      console.warn("User not found, skipping save chat history.");
+      return null;
+    }
+
+    if (isSaving) {
+      console.log("Save already in progress, skipping redundant save call.");
+      // Return the ID that was intended for this operation, or the component's current one as fallback
+      return currentHistoryIdFromCaller || chatHistoryId; 
+    }
+    setIsSaving(true);
+
+    const transformedMessages = messagesToSave.map(msg => ({
+      role: msg.isUser ? 'user' : 'assistant',
+      content: msg.content,
+      timestamp: msg.timestamp.toISOString(),
+    }));
+
+    console.log('Attempting to save chat history. Using History ID from caller:', currentHistoryIdFromCaller, 'Messages to save:', transformedMessages.length, 'First message content:', transformedMessages[0]?.content);
+
+    try {
+      if (currentHistoryIdFromCaller) { // Use passed ID for decision
+        // Update existing record
+        const { error } = await supabase
+          .from('ai_chat_history')
+          .update({ messages: transformedMessages, updated_at: new Date().toISOString() })
+          .eq('id', currentHistoryIdFromCaller); // Use passed ID for eq
+        if (error) throw error;
+        return currentHistoryIdFromCaller; // Return passed ID on successful update
+      } else {
+        // Insert new record
+        const { data, error } = await supabase
+          .from('ai_chat_history')
+          .insert([{ 
+            user_id: user.id, 
+            messages: transformedMessages, 
+            created_at: new Date().toISOString(), 
+            updated_at: new Date().toISOString() 
+          }])
+          .select('id'); // Select the id of the newly inserted row
+        
+        if (error) throw error;
+
+        if (data && data.length > 0 && data[0].id) {
+          setChatHistoryId(data[0].id); // Update component state for future operations
+          return data[0].id; // Return new ID on successful insert
+        }
+        return null; 
+      }
+    } catch (error: any) { // Ensure 'error' is typed as 'any' or 'unknown' for property access
+      console.error("Error saving chat history:", error); // Original console log
+      console.error('Supabase save error:', error); // Specific Supabase error log
+      
+      let detailedErrorMessage = "Failed to save chat history. Please try again."; // Default
+      if (error && typeof error.message === 'string') {
+        detailedErrorMessage = `Failed to save chat history: ${error.message}`;
+      } else if (error && typeof (error as any).error_description === 'string') { // Some Supabase errors have this
+        detailedErrorMessage = `Failed to save chat history: ${(error as any).error_description}`;
+      } else if (typeof error === 'string') {
+        detailedErrorMessage = `Failed to save chat history: ${error}`;
+      }
+      
+      toast({
+        title: "Error Saving Chat", // Slightly more specific title
+        description: detailedErrorMessage, // Display the detailed error
+        variant: "destructive",
+        duration: 10000 // Increase duration to allow time to read/copy
+      });
+      return null; 
+    } finally {
+      setIsSaving(false); 
+    }
+  }, [user, supabase, toast, isSaving, setIsSaving, setChatHistoryId, chatHistoryId]); // chatHistoryId kept for the isSaving return case
+
+  useEffect(() => {
+    if (!isHistoryLoaded || !user || !user.id || isSaving) { 
+      return; 
+    }
+    
+    if (
+      messages.length === 1 &&
+      messages[0].id === 1 && 
+      messages[0].content === "Hello! I'm your medical AI assistant. How can I help you today?" &&
+      !chatHistoryId 
+    ) {
+      return;
+    }
+
+    if (messages.length > 0) {
+      // Call with component's current chatHistoryId state for general saves
+      saveChatHistory(messages, chatHistoryId); 
+    }
+  }, [messages, isHistoryLoaded, user, chatHistoryId, saveChatHistory, isSaving]);
   
   // Share dialog state
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -152,48 +306,69 @@ export default function AiAssistant() {
   const handleSend = async () => {
     if (!input.trim()) return;
 
-    // Add user message
+    let operationSpecificHistoryId: string | null = chatHistoryId; // Use current state as starting point
+
+    // 1. Prepare user message
     const newUserMessage: Message = {
-      id: messages.length + 1,
+      id: Date.now(), 
       content: input,
       isUser: true,
       timestamp: new Date()
     };
+    const messagesWithUser = [...messages, newUserMessage];
     
-    setMessages(prev => [...prev, newUserMessage]);
+    // 2. Update UI with user message immediately
+    setMessages(messagesWithUser);
+    const currentInput = input; 
     setInput("");
-    
-    // Show AI typing indicator
     setIsTyping(true);
-    
+
+    // 3. Attempt to save after user message, update operationSpecificHistoryId
+    operationSpecificHistoryId = await saveChatHistory(messagesWithUser, operationSpecificHistoryId); 
+
     try {
-      // Call the actual AI service
-      const response = await askMedicalQuestion(input);
+      // 4. Get AI response
+      const conversationHistoryForAI = messagesWithUser.map(msg => ({
+        role: msg.isUser ? 'user' : 'assistant',
+        content: msg.content,
+      }));
+      const response = await askMedicalQuestion(currentInput, conversationHistoryForAI); // Use stored input
       
       const newAiMessage: Message = {
-        id: messages.length + 2,
+        id: Date.now() + 1, // Unique ID
         content: response.answer,
         isUser: false,
         timestamp: new Date()
       };
-      
-      setMessages(prev => [...prev, newAiMessage]);
+      const messagesWithAI = [...messagesWithUser, newAiMessage];
+
+      // 5. Update UI with AI message
+      setMessages(messagesWithAI);
+
+      // 6. Attempt to save after AI message, using the potentially updated operationSpecificHistoryId
+      await saveChatHistory(messagesWithAI, operationSpecificHistoryId);
+
     } catch (error: any) {
-      // Show error in chat
+      console.error("Error getting AI response:", error);
+      const errorMessageContent = `Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`;
       const errorMessage: Message = {
-        id: messages.length + 2,
-        content: `Sorry, I encountered an error: ${error.message || 'Unknown error'}. Please try again.`,
+        id: Date.now() + 2, 
+        content: errorMessageContent,
         isUser: false,
         timestamp: new Date()
       };
       
-      setMessages(prev => [...prev, errorMessage]);
+      const messagesWithError = [...messagesWithUser, errorMessage];
+      setMessages(messagesWithError); 
       
-      toast({
-        title: "Error",
+      toast({ 
+        title: "AI Error",
         description: error.message || "Failed to get AI response",
         variant: "destructive"
       });
+      
+      // Attempt to save conversation even if AI errored, using the potentially updated operationSpecificHistoryId
+      await saveChatHistory(messagesWithError, operationSpecificHistoryId); 
     } finally {
       setIsTyping(false);
     }
