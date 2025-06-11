@@ -1,20 +1,16 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
-import BottomNavigation from "@/components/BottomNavigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ChevronLeft, Search, Plus, Users, MessageSquare } from "lucide-react";
+import BottomNavigation from "@/components/BottomNavigation";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { ArrowLeft, Search, Plus, MessageSquare, PlusCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ChatRoom {
   id: string;
@@ -252,279 +248,235 @@ export default function DoctorChatRooms() {
     }
 
     try {
-      // Here in a real application, you would create the chat room in the database
-      // For now, we'll just simulate success
+      // For simplicity, we'll implement only 1:1 chats for now
+      // Group chat would require a more complex data model
+      if (selectedDoctors.length === 1) {
+        const doctorId = selectedDoctors[0];
+        
+        // Check if there are any existing messages
+        const { data, error } = await supabase
+          .from('messages')
+          .select('*')
+          .or(`and(sender_id.eq.${user.id},receiver_id.eq.${doctorId}),and(sender_id.eq.${doctorId},receiver_id.eq.${user.id})`)
+          .limit(1);
+        
+        if (error) throw error;
+        
+        // Send an initial message if this is the first conversation
+        if (!data || data.length === 0) {
+          const { error: sendError } = await supabase
+            .from('messages')
+            .insert({
+              sender_id: user.id,
+              receiver_id: doctorId,
+              content: 'Hello, I would like to discuss a case with you.',
+              read: false,
+              timestamp: new Date().toISOString()
+            });
+          
+          if (sendError) throw sendError;
+        }
+        
+        // Navigate to the chat
+        navigate(`/doctor/chat/${doctorId}`);
+      }
       
+    } catch (error) {
+      console.error("Error creating chat:", error);
       toast({
-        title: "Chat created",
-        description: selectedDoctors.length > 1
-          ? `Group chat "${groupName}" has been created successfully.`
-          : `Chat with ${availableDoctors.find(d => d.id === selectedDoctors[0])?.name} has been created.`,
+        title: "Error",
+        description: "Failed to create chat room",
+        variant: "destructive"
       });
-      
+    } finally {
       setDialogOpen(false);
       setSelectedDoctors([]);
       setGroupName("");
-      
-      // In a real application, you would redirect to the new chat room or fetch the updated list of chats
-    } catch (error) {
-      console.error("Error creating chat room:", error);
-      toast({
-        title: "Error",
-        description: "Failed to create chat room. Please try again.",
-        variant: "destructive",
-      });
     }
   };
 
-  const handleChatClick = (chatId: string) => {
-    navigate(`/doctor/chat/${chatId}`);
-  };
-
-  const formattedDate = format(new Date(), "EEEE, MMMM d");
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-[#004953] via-[#006064] to-[#00363a]">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#00C389]"></div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#004953] via-[#006064] to-[#00363a] pb-24">
-      <div className="w-full max-w-[425px] mx-auto px-5">
-        {/* Header */}
-        <div className="flex justify-between items-center w-full py-2.5 mt-5">
-          <button 
-            onClick={() => navigate(-1)} 
-            className="bg-transparent border-0 text-white text-2xl cursor-pointer"
-          >
-            <ArrowLeft size={24} />
-          </button>
-          <h2 className="text-xl font-bold text-white">Chats</h2>
-          <button 
-            onClick={() => setDialogOpen(true)} 
-            className="bg-transparent border-0 text-white text-2xl cursor-pointer"
-          >
-            <PlusCircle size={22} />
-          </button>
-        </div>
-        
-        {/* Date Display */}
-        <div className="w-full text-center mb-5">
-          <p className="text-white/80 text-sm">{formattedDate}</p>
-        </div>
-        
-        {/* Search */}
-        <div className="relative mb-5">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+    <div className="pb-24">
+      {/* Header */}
+      <div className="bg-primary text-white p-4 flex items-center">
+        <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
+          <ChevronLeft />
+        </Button>
+        <h1 className="text-xl font-bold">Chat Rooms</h1>
+      </div>
+
+      {/* Search */}
+      <div className="p-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
           <Input
-            type="text"
             placeholder="Search conversations..."
+            className="pl-10"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-4 py-2 bg-white rounded-[10px] border-0 shadow-sm w-full"
           />
         </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs defaultValue="patients" className="w-full">
+        <TabsList className="grid grid-cols-2 w-full px-4">
+          <TabsTrigger value="patients">Patients</TabsTrigger>
+          <TabsTrigger value="doctors">Doctors</TabsTrigger>
+        </TabsList>
         
-        {/* Tabs */}
-        <Tabs defaultValue="patients" className="w-full mb-5">
-          <TabsList className="grid grid-cols-2 bg-white rounded-full p-1 shadow-sm">
-            <TabsTrigger 
-              value="patients" 
-              className="data-[state=active]:bg-[#00C389] data-[state=active]:text-white rounded-full"
-            >
-              Patients
-            </TabsTrigger>
-            <TabsTrigger 
-              value="doctors" 
-              className="data-[state=active]:bg-[#00C389] data-[state=active]:text-white rounded-full"
-            >
-              Doctors
-            </TabsTrigger>
-          </TabsList>
-          
-          {/* Patient Chats Tab */}
-          <TabsContent value="patients" className="mt-4">
+        {/* Patients Tab */}
+        <TabsContent value="patients" className="px-4 mt-4">
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : (
             <div className="space-y-3">
               {filteredPatientChats.length > 0 ? (
-                filteredPatientChats.map(chat => (
-                  <div
-                    key={chat.id}
-                    className="bg-white rounded-[15px] p-4 shadow-lg cursor-pointer transition-transform hover:scale-[1.02]"
-                    onClick={() => handleChatClick(chat.id)}
-                  >
-                    <div className="flex items-center">
-                      <div className="relative">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback className="bg-[#004953]/10 text-[#004953]">
-                            {chat.name.split(" ").map((n) => n[0]).join("")}
-                          </AvatarFallback>
-                        </Avatar>
+                filteredPatientChats.map((chat) => (
+                  <Card key={chat.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => navigate(`/doctor/chat/${chat.id}`)}>
+                    <CardContent className="p-3">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                          <span className="text-primary font-semibold">{chat.name.charAt(0)}</span>
+                        </div>
+                        <div className="flex-grow min-w-0">
+                          <div className="flex justify-between items-center">
+                            <h3 className="font-semibold truncate">{chat.name}</h3>
+                            <span className="text-xs text-gray-500">{chat.time}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 truncate">{chat.lastMessage}</p>
+                        </div>
                         {chat.unread > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-[#00C389] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                            {chat.unread}
-                          </span>
+                          <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center ml-2">
+                            <span className="text-white text-xs">{chat.unread}</span>
+                          </div>
                         )}
                       </div>
-                      <div className="ml-3 flex-1">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-medium">{chat.name}</h3>
-                          <span className="text-xs text-gray-500">
-                            {chat.time}
-                          </span>
-                        </div>
-                        <p className={`text-sm mt-0.5 line-clamp-1 ${chat.unread > 0 ? 'font-medium text-gray-800' : 'text-gray-500'}`}>
-                          {chat.lastMessage || "No messages yet"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+                    </CardContent>
+                  </Card>
                 ))
               ) : (
-                <div className="bg-white rounded-[15px] p-6 text-center shadow-lg">
-                  <div className="w-16 h-16 bg-[#004953]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <MessageSquare className="w-8 h-8 text-[#00C389]" />
-                  </div>
-                  <h3 className="text-lg font-medium text-[#004953] mb-1">No Patient Conversations</h3>
-                  <p className="text-gray-500">You don't have any conversations with patients yet.</p>
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <p className="text-gray-500">No conversations found</p>
                 </div>
               )}
             </div>
-          </TabsContent>
-          
-          {/* Doctor Chats Tab */}
-          <TabsContent value="doctors" className="mt-4">
-            <div className="space-y-3">
-              {filteredDoctorChats.length > 0 ? (
-                filteredDoctorChats.map(chat => (
-                  <div
-                    key={chat.id}
-                    className="bg-white rounded-[15px] p-4 shadow-lg cursor-pointer transition-transform hover:scale-[1.02]"
-                    onClick={() => handleChatClick(chat.id)}
-                  >
-                    <div className="flex items-center">
-                      <div className="relative">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback className="bg-[#004953]/10 text-[#004953]">
-                            {chat.name.split(" ").map((n) => n[0]).join("")}
-                          </AvatarFallback>
-                        </Avatar>
-                        {chat.unread > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-[#00C389] text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
-                            {chat.unread}
-                          </span>
-                        )}
-                      </div>
-                      <div className="ml-3 flex-1">
-                        <div className="flex justify-between items-center">
-                          <h3 className="font-medium">Dr. {chat.name}</h3>
-                          <span className="text-xs text-gray-500">
-                            {chat.time}
-                          </span>
-                        </div>
-                        <p className={`text-sm mt-0.5 line-clamp-1 ${chat.unread > 0 ? 'font-medium text-gray-800' : 'text-gray-500'}`}>
-                          {chat.lastMessage || "No messages yet"}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="bg-white rounded-[15px] p-6 text-center shadow-lg">
-                  <div className="w-16 h-16 bg-[#004953]/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <MessageSquare className="w-8 h-8 text-[#00C389]" />
-                  </div>
-                  <h3 className="text-lg font-medium text-[#004953] mb-1">No Doctor Conversations</h3>
-                  <p className="text-gray-500 mb-4">You don't have any conversations with other doctors yet.</p>
-                  <Button 
-                    onClick={() => setDialogOpen(true)} 
-                    className="bg-[#00C389] hover:bg-[#00A070] text-white"
-                  >
-                    <Plus className="h-4 w-4 mr-2" /> Create New Chat
-                  </Button>
-                </div>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </TabsContent>
         
-        {/* Create Chat Dialog */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent className="sm:max-w-[425px] bg-white rounded-[15px]">
-            <DialogHeader>
-              <DialogTitle className="text-[#004953]">Create New Chat</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              {selectedDoctors.length > 1 && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Group Name</label>
-                  <Input
-                    placeholder="Enter group name"
-                    value={groupName}
-                    onChange={(e) => setGroupName(e.target.value)}
-                  />
-                </div>
-              )}
+        {/* Doctors Tab */}
+        <TabsContent value="doctors" className="px-4 mt-4">
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <div className="flex justify-end mb-4">
+              <DialogTrigger asChild>
+                <Button className="gap-1">
+                  <Plus className="h-4 w-4" /> New Chat
+                </Button>
+              </DialogTrigger>
+            </div>
+            
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create New Chat</DialogTitle>
+                <p className="text-sm text-muted-foreground">
+                  Select one or more doctors to start a conversation with.
+                </p>
+              </DialogHeader>
               
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Select Doctors</label>
-                <div className="bg-gray-50 rounded-lg p-2 max-h-[200px] overflow-y-auto">
-                  {availableDoctors.length > 0 ? (
-                    availableDoctors.map((doctor) => (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Select Doctors</p>
+                  <div className="space-y-2 max-h-60 overflow-y-auto">
+                    {availableDoctors.map((doctor) => (
                       <div
                         key={doctor.id}
-                        className="flex items-center space-x-3 p-2 hover:bg-gray-100 rounded-md"
+                        className={`flex items-center p-2 rounded-md cursor-pointer ${
+                          selectedDoctors.includes(doctor.id)
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background hover:bg-muted"
+                        }`}
+                        onClick={() => handleDoctorSelect(doctor.id)}
                       >
-                        <Checkbox
-                          checked={selectedDoctors.includes(doctor.id)}
-                          onCheckedChange={() => handleDoctorSelect(doctor.id)}
-                          id={doctor.id}
-                          className="data-[state=checked]:bg-[#00C389] data-[state=checked]:border-[#00C389]"
-                        />
-                        <label htmlFor={doctor.id} className="flex flex-1 items-center cursor-pointer">
-                          <Avatar className="h-8 w-8 mr-2">
-                            <AvatarFallback className="bg-[#004953]/10 text-[#004953]">
-                              {doctor.name.split(" ").map((n) => n[0]).join("")}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">Dr. {doctor.name}</p>
-                            <p className="text-xs text-gray-500">{doctor.specialty}</p>
-                          </div>
-                        </label>
+                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                          <span className={`font-semibold ${selectedDoctors.includes(doctor.id) ? "text-primary-foreground" : "text-primary"}`}>
+                            {doctor.name.charAt(0)}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{doctor.name}</p>
+                          <p className="text-xs opacity-80">{doctor.specialty}</p>
+                        </div>
                       </div>
-                    ))
-                  ) : (
-                    <p className="text-center text-gray-500 py-4">No other doctors available</p>
-                  )}
+                    ))}
+                  </div>
                 </div>
+                
+                {selectedDoctors.length > 1 && (
+                  <div className="space-y-2">
+                    <label htmlFor="group-name" className="text-sm font-medium">Group Name</label>
+                    <Input
+                      id="group-name"
+                      value={groupName}
+                      onChange={(e) => setGroupName(e.target.value)}
+                      placeholder="Enter group chat name"
+                    />
+                  </div>
+                )}
               </div>
+              
+              <DialogFooter>
+                <Button variant="secondary" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={createChatRoom}>
+                  {selectedDoctors.length === 1 ? "Start Chat" : "Create Group"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+          
+          {loading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             </div>
-            <DialogFooter className="sm:justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setDialogOpen(false);
-                  setSelectedDoctors([]);
-                  setGroupName("");
-                }}
-              >
-                Cancel
-              </Button>
-              <Button 
-                onClick={createChatRoom} 
-                className="bg-[#00C389] hover:bg-[#00A070] text-white ml-2"
-                disabled={selectedDoctors.length === 0}
-              >
-                Create Chat
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      </div>
-      
+          ) : (
+            <div className="space-y-3">
+              {filteredDoctorChats.length > 0 ? (
+                filteredDoctorChats.map((chat) => (
+                  <Card key={chat.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => navigate(`/doctor/chat/${chat.id}`)}>
+                    <CardContent className="p-3">
+                      <div className="flex items-center">
+                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+                          <span className="text-primary font-semibold">{chat.name.charAt(0)}</span>
+                        </div>
+                        <div className="flex-grow min-w-0">
+                          <div className="flex justify-between items-center">
+                            <h3 className="font-semibold truncate">{chat.name}</h3>
+                            <span className="text-xs text-gray-500">{chat.time}</span>
+                          </div>
+                          <p className="text-sm text-gray-600 truncate">{chat.lastMessage}</p>
+                        </div>
+                        {chat.unread > 0 && (
+                          <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center ml-2">
+                            <span className="text-white text-xs">{chat.unread}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              ) : (
+                <div className="text-center py-8 bg-gray-50 rounded-lg">
+                  <p className="text-gray-500">No conversations with other doctors</p>
+                </div>
+              )}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
       <BottomNavigation />
     </div>
   );

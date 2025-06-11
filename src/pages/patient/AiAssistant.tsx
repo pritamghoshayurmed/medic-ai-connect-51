@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Send, Bot, X, Image, MessageSquare, Share2, User, Activity } from "lucide-react";
+import { ChevronLeft, Send, Bot, X, Image, MessageSquare, Share2, User } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,7 +23,6 @@ interface Message {
 
 export default function AiAssistant() {
   const navigate = useNavigate();
-  const location = useLocation();
   const { toast } = useToast();
   const { user } = useAuth();
   
@@ -55,44 +54,6 @@ export default function AiAssistant() {
   const [selectedDoctorId, setSelectedDoctorId] = useState<string | null>(null);
   const [availableDoctors, setAvailableDoctors] = useState<any[]>([]);
   const [loadingDoctors, setLoadingDoctors] = useState(false);
-  
-  // Process measurement data from Vitals screen
-  useEffect(() => {
-    if (location.state?.measurementData) {
-      const { measurementData, type } = location.state;
-      
-      // Add user message about vital measurement
-      const measurementMessage: Message = {
-        id: messages.length + 1,
-        content: `I measured my ${type === 'bp' ? 'blood pressure' : 'heart rate'}: ${measurementData}`,
-        isUser: true,
-        timestamp: new Date()
-      };
-      
-      setMessages(prev => [...prev, measurementMessage]);
-      setIsTyping(true);
-      
-      // Simulate AI response about the measurement data
-      setTimeout(() => {
-        const responseContent = type === 'bp' 
-          ? "Thank you for sharing your blood pressure measurement. I'll analyze this data for you. Blood pressure readings typically consist of two numbers: systolic (the top number) and diastolic (the bottom number). A normal blood pressure is usually around 120/80 mmHg. Is there anything specific you'd like to know about your readings?"
-          : "Thank you for sharing your heart rate measurement. A normal resting heart rate for adults ranges from 60 to 100 beats per minute. Athletes in excellent physical condition might have a resting heart rate closer to 40 beats per minute. Is there anything specific you'd like to know about your heart rate?";
-        
-        const aiResponse: Message = {
-          id: messages.length + 2,
-          content: responseContent,
-          isUser: false,
-          timestamp: new Date()
-        };
-        
-        setMessages(prev => [...prev, aiResponse]);
-        setIsTyping(false);
-        
-        // Clear the location state after processing
-        navigate(location.pathname, { replace: true });
-      }, 1500);
-    }
-  }, [location.state]);
   
   // Load doctors for sharing
   const fetchDoctors = async () => {
@@ -239,8 +200,7 @@ export default function AiAssistant() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
+    if (e.key === 'Enter') {
       handleSend();
     }
   };
@@ -250,15 +210,18 @@ export default function AiAssistant() {
   };
 
   const handleImageUpload = async (file: File) => {
+    if (!file) return;
+    
     setIsAnalyzing(true);
+    setAnalysisResult(null);
+    
     try {
       const result = await analyzeImage(file);
       setAnalysisResult(result);
     } catch (error: any) {
-      console.error("Error analyzing image:", error);
       toast({
-        title: "Error analyzing image",
-        description: error.message || "There was an error analyzing your image. Please try again.",
+        title: "Error",
+        description: error.message || "Failed to analyze image",
         variant: "destructive"
       });
     } finally {
@@ -266,69 +229,25 @@ export default function AiAssistant() {
     }
   };
 
-  // Format AI response with simple markdown-like syntax
-  const formatAIResponse = (content: string) => {
-    if (!content) return '';
-    
-    // Replace double newlines with paragraph breaks
-    let formattedContent = content.split('\n\n').map(paragraph => 
-      `<p>${paragraph}</p>`
-    ).join('');
-    
-    // Replace single newlines with line breaks
-    formattedContent = formattedContent.replace(/\n/g, '<br />');
-    
-    // Format bold text
-    formattedContent = formattedContent.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    
-    // Format italic text
-    formattedContent = formattedContent.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    
-    // Format lists
-    formattedContent = formattedContent.replace(/<p>- (.*?)<\/p>/g, '<ul><li>$1</li></ul>');
-    formattedContent = formattedContent.replace(/<\/ul><ul>/g, '');
-    
-    // Format headings
-    formattedContent = formattedContent.replace(/<p>### (.*?)<\/p>/g, '<h3>$1</h3>');
-    formattedContent = formattedContent.replace(/<p>## (.*?)<\/p>/g, '<h2>$1</h2>');
-    formattedContent = formattedContent.replace(/<p># (.*?)<\/p>/g, '<h1>$1</h1>');
-    
-    return formattedContent;
-  };
-
   return (
-    <div className="h-screen flex flex-col bg-[#f5f5f5]">
+    <div className="pb-24 h-screen flex flex-col">
       {/* Header */}
-      <div className="bg-white shadow-sm py-4 px-4 flex justify-between items-center">
-        <div className="flex items-center">
-          <Button 
-            variant="ghost" 
-            size="icon"
-            onClick={() => navigate('/patient')}
-            className="mr-2"
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </Button>
-          <h1 className="font-bold text-lg text-[#004953]">Kabiraj AI</h1>
-        </div>
-        
-        {analysisResult && activeTab === "image" && (
-          <Button variant="ghost" size="sm" onClick={() => setAnalysisResult(null)}>
-            <X className="h-4 w-4 mr-1" />
-            Clear Analysis
-          </Button>
-        )}
+      <div className="bg-primary text-white p-4 flex items-center">
+        <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
+          <ChevronLeft />
+        </Button>
+        <h1 className="text-xl font-bold">AI Health Assistant</h1>
       </div>
       
       {/* Tabs */}
       <Tabs defaultValue="chat" value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <TabsList className="grid grid-cols-2 bg-white border-b border-gray-100">
-          <TabsTrigger value="chat" className="data-[state=active]:text-[#004953] data-[state=active]:bg-[#e8f5f3] rounded-none border-b-2 data-[state=active]:border-[#004953] data-[state=inactive]:border-transparent py-3">
-            <MessageSquare className="h-4 w-4 mr-1" />
+        <TabsList className="grid grid-cols-2 mx-4 mt-2">
+          <TabsTrigger value="chat" className="flex items-center gap-1">
+            <MessageSquare className="h-4 w-4" />
             <span>Chat</span>
           </TabsTrigger>
-          <TabsTrigger value="doctor" className="data-[state=active]:text-[#004953] data-[state=active]:bg-[#e8f5f3] rounded-none border-b-2 data-[state=active]:border-[#004953] data-[state=inactive]:border-transparent py-3">
-            <User className="h-4 w-4 mr-1" />
+          <TabsTrigger value="doctor" className="flex items-center gap-1">
+            <User className="h-4 w-4" />
             <span>Chat with Doctor</span>
           </TabsTrigger>
         </TabsList>
@@ -354,14 +273,7 @@ export default function AiAssistant() {
                       <span className="font-bold">AI Assistant</span>
                     </div>
                   )}
-                  {message.isUser ? (
-                    <p>{message.content}</p>
-                  ) : (
-                    <div 
-                      className="prose prose-sm max-w-none" 
-                      dangerouslySetInnerHTML={{ __html: formatAIResponse(message.content) }}
-                    />
-                  )}
+                  <p>{message.content}</p>
                   <p className={`text-xs mt-1 ${message.isUser ? "text-white/70" : "text-gray-500"}`}>
                     {formatTime(message.timestamp)}
                   </p>
@@ -410,9 +322,9 @@ export default function AiAssistant() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message..."
-                className="flex-grow border border-gray-200 focus-visible:ring-[#00C389]"
+                className="flex-grow"
               />
-              <Button onClick={handleSend} disabled={!input.trim() || isTyping} className="bg-[#00C389] hover:bg-[#00A070]">
+              <Button onClick={handleSend} disabled={!input.trim() || isTyping}>
                 <Send className="h-4 w-4" />
               </Button>
             </div>
@@ -420,27 +332,16 @@ export default function AiAssistant() {
               <p className="text-xs text-gray-500">
                 This AI assistant uses Google's Gemini AI to provide medical information. Always consult a healthcare professional for medical advice.
               </p>
-              <div className="flex gap-2">
+              {messages.length > 1 && (
                 <Button 
                   variant="outline" 
-                  size="sm"
-                  onClick={() => navigate("/patient/vitals")}
-                  className="whitespace-nowrap flex-shrink-0"
+                  size="sm" 
+                  onClick={openShareDialog}
+                  className="ml-2 whitespace-nowrap flex-shrink-0"
                 >
-                  <Activity className="h-4 w-4 mr-1" /> Measure Vitals
+                  <Share2 className="h-4 w-4 mr-1" /> Share with Doctor
                 </Button>
-                
-                {messages.length > 1 && (
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={openShareDialog}
-                    className="whitespace-nowrap flex-shrink-0"
-                  >
-                    <Share2 className="h-4 w-4 mr-1" /> Share with Doctor
-                  </Button>
-                )}
-              </div>
+              )}
             </div>
           </div>
         </TabsContent>
@@ -465,9 +366,9 @@ export default function AiAssistant() {
                 <Button 
                   variant="outline" 
                   className="w-full bg-gray-50 text-primary border-primary hover:bg-gray-100"
-                  onClick={() => navigate('/patient/chat')}
+                  onClick={() => navigate('/patient/appointments')}
                 >
-                  My Chats
+                  My Appointments
                 </Button>
               </div>
             </div>

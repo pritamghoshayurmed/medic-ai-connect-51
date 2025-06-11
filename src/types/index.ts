@@ -94,7 +94,6 @@ export interface Appointment {
   date: string;
   time: string;
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-  type?: 'in-person' | 'video' | 'phone';
   reason?: string;
   notes?: string;
   doctorName?: string;

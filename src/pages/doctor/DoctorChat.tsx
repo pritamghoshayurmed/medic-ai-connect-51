@@ -5,35 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Message } from "@/types";
-import { format, formatDistanceToNow } from "date-fns";
-import { 
-  ArrowLeft, 
-  Send, 
-  Image as ImageIcon, 
-  X, 
-  FileText, 
-  Phone,
-  Video,
-  MoreVertical,
-  PaperclipIcon 
-} from "lucide-react";
+import { format } from "date-fns";
+import { ArrowLeft, Send, Image as ImageIcon, X, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { cn } from "@/lib/utils";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 
 interface ExtendedMessage extends Message {
   imageUrl?: string;
@@ -67,10 +44,7 @@ export default function DoctorChat() {
   const prescriptionInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [selectedPrescription, setSelectedPrescription] = useState<File | null>(null);
-  const [selectedImagePreview, setSelectedImagePreview] = useState<string | null>(null);
-  const [selectedPrescriptionPreview, setSelectedPrescriptionPreview] = useState<string | null>(null);
-  const [showPrescriptionDialog, setShowPrescriptionDialog] = useState(false);
-  const [viewImageDialog, setViewImageDialog] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>("chat");
 
   useEffect(() => {
     if (!user) return;
@@ -134,9 +108,9 @@ export default function DoctorChat() {
             content: msg.content,
             timestamp: msg.timestamp,
             read: msg.read,
-            imageUrl: msg.image_url || null,
-            prescriptionUrl: msg.prescription_url || null,
-            isAI: false
+            imageUrl: null, // Default value since image_url doesn't exist in the database
+            prescriptionUrl: null, // Default value since prescription_url doesn't exist in the database
+            isAI: false // Default value since is_ai doesn't exist in the database
           }));
           
           setMessages(typedMessages);
@@ -186,7 +160,7 @@ export default function DoctorChat() {
             read: newMsg.read,
             imageUrl: newMsg.image_url || null,
             prescriptionUrl: newMsg.prescription_url || null,
-            isAI: false
+            isAI: false // Default value since is_ai doesn't exist in the database
           };
           
           // Add to messages if not already there
@@ -218,7 +192,7 @@ export default function DoctorChat() {
 
   const sendMessage = async () => {
     // Check if message is empty or user/id is not available
-    if (!newMessage.trim() && !selectedImage && !selectedPrescription) return;
+    if (!newMessage.trim() || !user || !id) return;
     
     try {
       // Create timestamp for message
@@ -229,43 +203,32 @@ export default function DoctorChat() {
       // Create optimistic message for UI
       const optimisticMessage: ExtendedMessage = {
         id: tempMessageId,
-        sender_id: user!.id,
-        receiver_id: id!,
-        content: messageContent || (selectedImage ? 'Sent an image' : 'Sent a prescription'),
+        sender_id: user.id,
+        receiver_id: id,
+        content: messageContent,
         timestamp: timestamp,
         read: false,
-        imageUrl: selectedImagePreview,
-        prescriptionUrl: selectedPrescriptionPreview,
+        imageUrl: null,
+        prescriptionUrl: null,
         isAI: false
       };
       
       // Update UI immediately with optimistic message
       setMessages(prev => [...prev, optimisticMessage]);
       
-      // Clear the input and selected files
+      // Clear the input
       setNewMessage("");
-      setSelectedImage(null);
-      setSelectedPrescription(null);
-      setSelectedImagePreview(null);
-      setSelectedPrescriptionPreview(null);
       
-              // Define the message to save - only include fields that exist in the database
-        const messageToSave: any = {
-          sender_id: user!.id,
-          receiver_id: id!,
-          content: messageContent || (selectedImage ? 'Sent an image' : 'Sent a prescription'),
-          read: false,
-          timestamp: timestamp
-        };
-        
-        // Add image_url and prescription_url if they exist in the database
-        if (selectedImagePreview) {
-          messageToSave.image_url = selectedImagePreview;
-        }
-        
-        if (selectedPrescriptionPreview) {
-          messageToSave.prescription_url = selectedPrescriptionPreview;
-        }
+      // Define the message to save - only include fields that exist in the database
+      const messageToSave = {
+        sender_id: user.id,
+        receiver_id: id,
+        content: messageContent,
+        read: false,
+        timestamp: timestamp
+      };
+      
+      console.log("Sending message:", JSON.stringify(messageToSave));
       
       // Insert the message
       const { data, error } = await supabase
@@ -282,12 +245,34 @@ export default function DoctorChat() {
           description: "Failed to send message. Please try again.",
           variant: "destructive",
         });
+        return;
       }
-    } catch (error) {
-      console.error("Error in sendMessage:", error);
+      
+      // Replace optimistic message with real message
+      if (data && data.length > 0) {
+        const dbMessage = data[0] as DBMessage;
+        const finalMessage: ExtendedMessage = {
+          id: dbMessage.id,
+          sender_id: dbMessage.sender_id,
+          receiver_id: dbMessage.receiver_id,
+          content: dbMessage.content,
+          timestamp: dbMessage.timestamp,
+          read: dbMessage.read,
+          imageUrl: dbMessage.image_url || null,
+          prescriptionUrl: dbMessage.prescription_url || null,
+          isAI: false // Default value since is_ai doesn't exist in the database
+        };
+        
+        setMessages(prev => prev.map(msg => 
+          msg.id === tempMessageId ? finalMessage : msg
+        ));
+      }
+      
+    } catch (err) {
+      console.error("Error in sendMessage:", err);
       toast({
         title: "Error",
-        description: "An unexpected error occurred. Please try again.",
+        description: "Failed to send message. Please try again.",
         variant: "destructive",
       });
     }
@@ -301,412 +286,270 @@ export default function DoctorChat() {
   };
 
   const goBack = () => {
-    navigate(-1);
+    navigate('/doctor/chat-rooms');
   };
-
+  
   const handleImageClick = () => {
     fileInputRef.current?.click();
   };
 
   const handlePrescriptionClick = () => {
-    setShowPrescriptionDialog(true);
+    prescriptionInputRef.current?.click();
   };
-
+  
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      
-      // Check if file is an image
-      if (!file.type.startsWith('image/')) {
-        toast({
-          title: "Invalid file type",
-          description: "Please select an image file.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Check file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File too large",
-          description: "Please select an image less than 5MB.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setSelectedImage(file);
-      
-      // Create preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check if file is an image
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file (JPEG, PNG, etc.)",
+        variant: "destructive",
+      });
+      return;
     }
+    
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select an image smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setSelectedImage(file);
   };
 
   const handlePrescriptionFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      
-      // Check file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast({
-          title: "File too large",
-          description: "Please select a file less than 5MB.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      setSelectedPrescription(file);
-      
-      // Create preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setSelectedPrescriptionPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Please select a file smaller than 5MB",
+        variant: "destructive",
+      });
+      return;
     }
+    
+    setSelectedPrescription(file);
   };
-
+  
   const removeSelectedImage = () => {
     setSelectedImage(null);
-    setSelectedImagePreview(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+      fileInputRef.current.value = '';
     }
   };
 
   const removeSelectedPrescription = () => {
     setSelectedPrescription(null);
-    setSelectedPrescriptionPreview(null);
     if (prescriptionInputRef.current) {
-      prescriptionInputRef.current.value = "";
+      prescriptionInputRef.current.value = '';
     }
   };
 
+  // Function to format markdown (bold, italics, etc.)
   const formatMessage = (content: string) => {
-    // Handle URLs
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return content.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-600 underline">$1</a>');
+    // Bold: **text** -> <strong>text</strong>
+    let formattedText = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Italic: *text* -> <em>text</em>
+    formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Preserve newlines
+    formattedText = formattedText.replace(/\n/g, '<br>');
+    
+    return formattedText;
   };
 
-  const formattedDate = format(new Date(), "EEEE, MMMM d");
+  if (loading) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-[#004953] via-[#006064] to-[#00363a] flex flex-col">
-      <div className="flex-1 flex flex-col w-full max-w-[425px] mx-auto">
-        {/* Header */}
-        <div className="bg-white shadow-md px-4 py-3 rounded-b-[15px]">
-          <div className="flex items-center">
-            <button 
-              className="p-1 rounded-full hover:bg-gray-100"
-              onClick={goBack}
-            >
-              <ArrowLeft className="text-gray-700" size={20} />
-            </button>
-            
-            {otherUser && (
-              <div className="flex items-center ml-3">
-                <Avatar className="h-10 w-10">
-                  <AvatarImage src={otherUser.profilePic} />
-                  <AvatarFallback className="bg-[#004953]/10 text-[#004953]">
-                    {otherUser.full_name?.charAt(0) || "U"}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="ml-3">
-                  <h3 className="font-medium text-gray-900">
-                    {otherUser.role === 'doctor' ? `Dr. ${otherUser.full_name}` : otherUser.full_name}
-                  </h3>
-                  <div className="flex items-center">
-                    <span className="h-2 w-2 bg-[#00C389] rounded-full"></span>
-                    <span className="text-xs text-gray-500 ml-1.5">Online</span>
-                  </div>
+    <div className="flex flex-col h-screen bg-gray-50">
+      {/* Header */}
+      <div className="bg-white shadow px-4 py-3 flex items-center gap-3">
+        <Button variant="ghost" size="icon" onClick={goBack}>
+          <ArrowLeft />
+        </Button>
+        
+        <Avatar className="h-10 w-10">
+          <AvatarImage src={otherUser?.profilePic} />
+          <AvatarFallback>{otherUser?.full_name?.charAt(0) || '?'}</AvatarFallback>
+        </Avatar>
+        
+        <div>
+          <h1 className="font-semibold">{otherUser?.full_name}</h1>
+          <p className="text-xs text-gray-500">
+            {otherUser?.role === 'doctor' ? 'Doctor' : 'Patient'}
+          </p>
+        </div>
+      </div>
+      
+      <Tabs defaultValue="chat" value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+        <TabsList className="grid grid-cols-2 w-full">
+          <TabsTrigger value="chat">Chat</TabsTrigger>
+          <TabsTrigger value="prescriptions">Prescriptions</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="chat" className="flex-1 flex flex-col">
+          {/* Messages area */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {messages.map((message) => {
+              const isFromMe = message.sender_id === user?.id;
+              return (
+                <div key={message.id} className={`flex ${isFromMe ? 'justify-end' : 'justify-start'}`}>
+                  <Card className={`max-w-[80%] ${isFromMe ? 'bg-primary text-primary-foreground' : 'bg-gray-100'}`}>
+                    <CardContent className="p-3">
+                      {message.imageUrl && (
+                        <div className="mb-2">
+                          <img 
+                            src={message.imageUrl} 
+                            alt="Shared image" 
+                            className="rounded-md max-w-full max-h-64 object-contain" 
+                          />
+                        </div>
+                      )}
+                      
+                      {message.prescriptionUrl && (
+                        <div className="mb-2 bg-white rounded-md p-2 flex items-center">
+                          <FileText className="h-5 w-5 mr-2 text-blue-500" />
+                          <a 
+                            href={message.prescriptionUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className={`text-sm underline ${isFromMe ? 'text-primary-foreground' : 'text-blue-500'}`}
+                          >
+                            View Prescription
+                          </a>
+                        </div>
+                      )}
+                      
+                      {message.content && message.isAI ? (
+                        <div 
+                          className="text-sm prose prose-sm max-w-none dark:prose-invert"
+                          dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
+                        />
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                      )}
+                      
+                      <p className={`text-xs mt-1 ${isFromMe ? 'text-primary-foreground/70' : 'text-gray-500'}`}>
+                        {format(new Date(message.timestamp), 'p')}
+                      </p>
+                    </CardContent>
+                  </Card>
                 </div>
+              );
+            })}
+            <div ref={messagesEndRef} />
+          </div>
+          
+          {/* Selected file previews */}
+          <div className="px-3 space-y-2">
+            {selectedImage && (
+              <div className="p-2 bg-gray-100 border-t flex items-center">
+                <div className="relative mr-2">
+                  <img 
+                    src={URL.createObjectURL(selectedImage)} 
+                    alt="Preview" 
+                    className="h-16 w-16 object-cover rounded"
+                  />
+                  <button 
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                    onClick={removeSelectedImage}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <p className="text-sm text-gray-600 flex-1 truncate">{selectedImage.name}</p>
               </div>
             )}
             
-            <div className="ml-auto flex">
-              <button className="p-2 text-gray-600 hover:text-gray-900">
-                <Phone size={18} />
-              </button>
-              <button className="p-2 text-gray-600 hover:text-gray-900 ml-1">
-                <Video size={18} />
-              </button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button className="p-2 text-gray-600 hover:text-gray-900 ml-1">
-                    <MoreVertical size={18} />
+            {selectedPrescription && (
+              <div className="p-2 bg-gray-100 border-t flex items-center">
+                <div className="relative mr-2 bg-blue-100 h-16 w-16 flex items-center justify-center rounded">
+                  <FileText className="h-8 w-8 text-blue-500" />
+                  <button 
+                    className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1"
+                    onClick={removeSelectedPrescription}
+                  >
+                    <X className="h-3 w-3" />
                   </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem>View Patient Profile</DropdownMenuItem>
-                  <DropdownMenuItem>Clear Chat History</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </div>
-        </div>
-        
-        {/* Messages Area */}
-        <div className="flex-1 px-4 py-5 overflow-y-auto bg-gray-50 mb-[70px]">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-[#00C389]"></div>
-            </div>
-          ) : messages.length > 0 ? (
-            <div className="space-y-4">
-              {messages.map((message, index) => {
-                const isUserMessage = message.sender_id === user?.id;
-                const showTimestamp = index === 0 || 
-                  new Date(message.timestamp).getDate() !== new Date(messages[index - 1].timestamp).getDate();
-                
-                return (
-                  <div key={message.id}>
-                    {showTimestamp && (
-                      <div className="flex justify-center my-4">
-                        <span className="text-xs bg-gray-200 text-gray-600 py-1 px-2 rounded-full">
-                          {format(new Date(message.timestamp), "EEEE, MMMM d")}
-                        </span>
-                      </div>
-                    )}
-                    
-                    <div className={cn(
-                      "flex max-w-[85%]",
-                      isUserMessage ? "ml-auto" : "mr-auto"
-                    )}>
-                      {!isUserMessage && (
-                        <Avatar className="h-8 w-8 mr-2 mt-1">
-                          <AvatarImage src={otherUser?.profilePic} />
-                          <AvatarFallback className="bg-[#004953]/10 text-[#004953]">
-                            {otherUser?.full_name?.charAt(0) || "U"}
-                          </AvatarFallback>
-                        </Avatar>
-                      )}
-                      
-                      <div className={cn(
-                        "rounded-xl py-2 px-3 relative min-w-[60px]",
-                        isUserMessage 
-                          ? "bg-[#00C389] text-white rounded-br-none" 
-                          : "bg-white text-gray-800 shadow-sm rounded-bl-none"
-                      )}>
-                        {message.imageUrl && (
-                          <div 
-                            className="mb-2 cursor-pointer rounded-lg overflow-hidden"
-                            onClick={() => setViewImageDialog(message.imageUrl!)}
-                          >
-                            <img 
-                              src={message.imageUrl} 
-                              alt="Attached image" 
-                              className="max-w-full max-h-[200px] object-cover"
-                            />
-                          </div>
-                        )}
-                        
-                        {message.prescriptionUrl && (
-                          <div className="mb-2 p-3 bg-gray-100 rounded-lg flex items-center">
-                            <FileText className="h-6 w-6 text-blue-500 mr-2" />
-                            <div>
-                              <p className="text-sm font-medium">Prescription</p>
-                              <p className="text-xs text-gray-500">Click to view</p>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {message.content && (
-                          <div 
-                            className="text-sm"
-                            dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
-                          />
-                        )}
-                        
-                        <span className={cn(
-                          "text-[10px] absolute bottom-1 right-1",
-                          isUserMessage ? "text-white/80" : "text-gray-500"
-                        )}>
-                          {format(new Date(message.timestamp), "HH:mm")}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-              <div ref={messagesEndRef} />
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full">
-              <div className="w-16 h-16 bg-[#00C389]/10 rounded-full flex items-center justify-center mb-4">
-                <Send className="h-8 w-8 text-[#00C389]" />
+                </div>
+                <p className="text-sm text-gray-600 flex-1 truncate">{selectedPrescription.name}</p>
               </div>
-              <p className="text-gray-500 text-center">No messages yet. Start the conversation!</p>
-            </div>
-          )}
-        </div>
-        
-        {/* Message Input */}
-        <div className="fixed bottom-0 left-0 right-0 bg-white p-3 shadow-[0_-1px_3px_rgba(0,0,0,0.1)] max-w-[425px] mx-auto rounded-t-[15px]">
-          {selectedImagePreview && (
-            <div className="relative mb-2 inline-block">
-              <img 
-                src={selectedImagePreview} 
-                alt="Selected image" 
-                className="h-16 w-auto rounded border"
-              />
-              <button
-                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-0.5"
-                onClick={removeSelectedImage}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
+            )}
+          </div>
           
-          {selectedPrescriptionPreview && (
-            <div className="relative mb-2 inline-flex items-center bg-blue-50 py-1 px-2 rounded border">
-              <FileText className="h-4 w-4 text-blue-500 mr-1" />
-              <span className="text-xs">Prescription attached</span>
-              <button
-                className="ml-1 text-red-500"
-                onClick={removeSelectedPrescription}
-              >
-                <X size={12} />
-              </button>
-            </div>
-          )}
-          
-          <div className="flex items-end">
-            <div className="relative flex-grow">
+          {/* Message input */}
+          <div className="border-t p-3 bg-white mt-auto">
+            <div className="flex gap-2">
               <Textarea
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Type a message..."
-                className="resize-none min-h-[40px] max-h-[120px] pr-12 py-2 rounded-full border-gray-200"
+                className="min-h-[60px] resize-none"
               />
-              <div className="absolute bottom-1 right-2 flex">
-                <button 
-                  className="p-1.5 text-gray-500"
-                  onClick={handleImageClick}
-                >
-                  <ImageIcon size={18} />
-                </button>
-                <button 
-                  className="p-1.5 text-gray-500 ml-1"
-                  onClick={handlePrescriptionClick}
-                >
-                  <FileText size={18} />
-                </button>
-              </div>
+              
+              <Button 
+                onClick={sendMessage} 
+                disabled={!newMessage.trim()} 
+                className="flex-shrink-0"
+                type="submit"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
             </div>
-            <Button
-              className="ml-2 w-10 h-10 rounded-full p-0 bg-[#00C389] hover:bg-[#00A070] flex items-center justify-center flex-shrink-0"
-              onClick={sendMessage}
-              disabled={!newMessage.trim() && !selectedImage && !selectedPrescription}
-            >
-              <Send className="h-5 w-5" />
-            </Button>
           </div>
-          
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            accept="image/*"
-          />
-        </div>
-      </div>
-      
-      {/* View Image Dialog */}
-      <Dialog open={!!viewImageDialog} onOpenChange={() => setViewImageDialog(null)}>
-        <DialogContent className="sm:max-w-[600px] p-0 overflow-hidden bg-black rounded-lg">
-          <div className="relative">
-            <img 
-              src={viewImageDialog || ''} 
-              alt="Enlarged image" 
-              className="w-full h-auto max-h-[80vh] object-contain"
-            />
-            <button 
-              className="absolute top-2 right-2 bg-black/50 text-white rounded-full p-1" 
-              onClick={() => setViewImageDialog(null)}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
-      
-      {/* Prescription Dialog */}
-      <Dialog open={showPrescriptionDialog} onOpenChange={setShowPrescriptionDialog}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Add Prescription</DialogTitle>
-            <DialogDescription>
-              Upload a prescription or create one digitally.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-2">
-            <div className="border-2 border-dashed rounded-lg p-6 text-center cursor-pointer hover:bg-gray-50 transition-colors"
-              onClick={() => prescriptionInputRef.current?.click()}
-            >
-              <PaperclipIcon className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-              <p className="text-sm font-medium">Upload Prescription</p>
-              <p className="text-xs text-gray-500">PDF, JPG, or PNG up to 5MB</p>
-            </div>
+        </TabsContent>
+        
+        <TabsContent value="prescriptions" className="flex-1 overflow-y-auto p-4">
+          <div className="space-y-4">
+            <h2 className="text-xl font-bold">Prescriptions</h2>
             
-            <input
-              type="file"
-              ref={prescriptionInputRef}
-              onChange={handlePrescriptionFileChange}
-              className="hidden"
-              accept=".pdf,.jpg,.jpeg,.png"
-            />
-            
-            {selectedPrescriptionPreview && (
-              <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-between">
-                <div className="flex items-center">
-                  <FileText className="h-6 w-6 text-blue-500 mr-2" />
-                  <div>
-                    <p className="text-sm font-medium">Prescription file selected</p>
-                    <p className="text-xs text-gray-500">{selectedPrescription?.name}</p>
-                  </div>
-                </div>
-                <button
-                  className="text-red-500"
-                  onClick={removeSelectedPrescription}
-                >
-                  <X size={16} />
-                </button>
+            {messages.filter(m => m.prescriptionUrl).length > 0 ? (
+              messages
+                .filter(m => m.prescriptionUrl)
+                .map((message) => (
+                  <Card key={message.id} className="overflow-hidden">
+                    <CardContent className="p-4">
+                      <div className="flex items-center">
+                        <div className="bg-blue-100 p-3 rounded-md mr-3">
+                          <FileText className="h-6 w-6 text-blue-500" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-medium">Prescription</h3>
+                          <p className="text-sm text-gray-500">
+                            {format(new Date(message.timestamp), 'PPP p')}
+                          </p>
+                        </div>
+                        <Button asChild size="sm">
+                          <a href={message.prescriptionUrl} target="_blank" rel="noopener noreferrer">
+                            View
+                          </a>
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+            ) : (
+              <div className="text-center py-8 bg-gray-50 rounded-lg">
+                <p className="text-gray-500">No prescriptions have been shared yet</p>
               </div>
             )}
           </div>
-          
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowPrescriptionDialog(false)}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="bg-[#00C389] hover:bg-[#00A070] text-white"
-              onClick={() => {
-                setShowPrescriptionDialog(false);
-                if (selectedPrescription) {
-                  sendMessage();
-                }
-              }}
-              disabled={!selectedPrescription}
-            >
-              Attach Prescription
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 } 

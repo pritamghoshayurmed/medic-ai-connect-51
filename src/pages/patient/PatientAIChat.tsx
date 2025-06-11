@@ -6,33 +6,18 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { askMedicalQuestion } from "@/services/doctorAiService";
 import { supabase, rawSupabase } from "@/integrations/supabase/client";
-import { Bot, X, ChevronLeft, MessageSquare, User, Send, Paperclip, Mic, Image as ImageIcon, File, Stethoscope, Pill, Heart, MoreVertical, Plus, Copy, ThumbsUp, ThumbsDown, ChevronRight, Home, Activity, Search } from "lucide-react";
+import { Bot, X, ChevronLeft, MessageSquare, User } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
 import BottomNavigation from "@/components/BottomNavigation";
-import { format } from 'date-fns';
-import { v4 as uuidv4 } from 'uuid';
-import ReactMarkdown from 'react-markdown';
-import rehypeHighlight from 'rehype-highlight';
-import { motion } from 'framer-motion';
-import { toast } from 'sonner';
 
 // Interface definitions
 interface Message {
-  id: string;
-  role: 'user' | 'assistant';
+  id: number;
   content: string;
-  timestamp: string;
-  attachments?: string[];
-}
-
-interface ChatSession {
-  id: string;
-  title: string;
-  lastMessage: string;
-  lastTimestamp: string;
-  messages: Message[];
+  isUser: boolean;
+  timestamp: Date;
 }
 
 interface ChatHistoryItem {
@@ -63,10 +48,10 @@ export default function PatientAIChat() {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([
     {
-      id: "1",
-      role: "assistant",
+      id: 1,
       content: "Hello! I'm Kabiraj, your medical assistant. What symptom is troubling you the most?",
-      timestamp: new Date().toISOString()
+      isUser: false,
+      timestamp: new Date()
     }
   ]);
   const [isLoading, setIsLoading] = useState(false);
@@ -79,7 +64,7 @@ export default function PatientAIChat() {
   const [hasLoadedInitialHistory, setHasLoadedInitialHistory] = useState(false);
   
   // Active tab state
-  const [activeTab, setActiveTab] = useState<string>("chat");
+  const [activeTab, setActiveTab] = useState("ai-chat");
   
   // Doctor chats state
   const [doctorChats, setDoctorChats] = useState<ChatRoom[]>([]);
@@ -277,10 +262,10 @@ export default function PatientAIChat() {
     
     // Add user message to local state
     const newUserMessage: Message = {
-      id: uuidv4(),
-      role: "user",
+      id: Date.now(),
       content: message,
-      timestamp: new Date().toISOString()
+      isUser: true,
+      timestamp: new Date()
     };
     
     // Update UI immediately with user message only
@@ -303,10 +288,10 @@ export default function PatientAIChat() {
       
       // Add AI response to chat
       const aiMessage: Message = {
-        id: uuidv4(),
-        role: "assistant",
+        id: Date.now() + 1,
         content: response.answer,
-        timestamp: new Date().toISOString()
+        isUser: false,
+        timestamp: new Date()
       };
       
       // Update messages with both user and AI message
@@ -339,10 +324,10 @@ export default function PatientAIChat() {
       
       // Add error message to chat
       setMessages(prev => [...prev, {
-        id: uuidv4(),
-        role: "assistant",
+        id: Date.now() + 1,
         content: "Sorry, I encountered an error connecting to the AI service. Please try again later.",
-        timestamp: new Date().toISOString()
+        isUser: false,
+        timestamp: new Date()
       }]);
       
     } finally {
@@ -437,7 +422,7 @@ export default function PatientAIChat() {
       }
       
       // Prepare conversation summary
-      const userMessages = messages.filter(m => m.role === "user").map(m => m.content);
+      const userMessages = messages.filter(m => m.isUser).map(m => m.content);
       
       // Create a summary text
       const summaryText = `AI Chat Summary: ${userMessages[0]?.substring(0, 40)}...`;
@@ -591,7 +576,7 @@ export default function PatientAIChat() {
       
       // Convert normal messages to the conversation history format
       const messageHistory = historyItem.messages.map(msg => ({
-        role: msg.role,
+        role: msg.isUser ? "user" : "model",
         content: msg.content
       }));
       
@@ -627,7 +612,7 @@ export default function PatientAIChat() {
         console.log(`Saving chat to database (attempt ${retryCount + 1})...`);
         
         // Extract a summary from the conversation
-        const userMessages = msgsToSave.filter(m => m.role === "user").map(m => m.content);
+        const userMessages = msgsToSave.filter(m => m.isUser).map(m => m.content);
         
         // Get the first question as a summary
         const summary = userMessages[0]?.substring(0, 50) + "...";
@@ -887,160 +872,298 @@ export default function PatientAIChat() {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gradient-to-br from-[#004953] via-[#006064] to-[#00363a]">
-      {/* Header */}
-      <div className="flex items-center p-4 text-white">
-        <button 
-          onClick={() => navigate(-1)}
-          className="mr-3"
-        >
-          <ChevronLeft size={24} />
-        </button>
-        <h1 className="text-xl font-semibold">Chat</h1>
-      </div>
-      
-      {/* Chat Tabs */}
-      <div className="bg-[#004953] text-white px-4 pb-4">
-        <div className="flex border-b border-white/20">
-          <button 
-            className={`flex-1 py-3 text-center font-medium ${activeTab === 'kabiraj' ? 'border-b-2 border-[#00C389]' : ''}`}
-            onClick={() => setActiveTab('kabiraj')}
-          >
-            Kabiraj AI
-          </button>
-          <button 
-            className={`flex-1 py-3 text-center font-medium ${activeTab === 'doctor' ? 'border-b-2 border-[#00C389]' : ''}`}
-            onClick={() => setActiveTab('doctor')}
-          >
-            Chat with Doctor
-          </button>
+    <div className="flex flex-col h-screen bg-gray-50">
+      {/* Error message container */}
+      {errorMessage && (
+        <div id="error-message" className="bg-red-500 text-white p-2 text-center">
+          {errorMessage}
         </div>
-      </div>
-      
-      {/* Chat Messages */}
-      <div
-        ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 bg-[#004953]"
-      >
-        {messages.map((message) => (
-          <div 
-            key={message.id}
-            className={`max-w-3/4 ${message.role === 'user' ? 'self-end' : 'self-start'}`}
+      )}
+
+      {/* Chat Header */}
+      <div className="bg-primary flex items-center justify-between p-4 text-white">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          className="text-white hover:bg-primary/80"
+          onClick={() => setShowHistory(true)}
+        >
+          <i className="fas fa-bars"></i>
+        </Button>
+        <h1 className="text-xl font-bold">KABIRAJ AI Chat</h1>
+        {activeTab === "ai-chat" && (
+          <Button 
+            id="report-btn" 
+            variant="secondary" 
+            size="sm" 
+            className="bg-white text-primary hover:bg-gray-100"
+            onClick={sendToDoctor}
           >
-            <div 
-              className={`p-3 rounded-2xl ${
-                message.role === 'user' 
-                  ? 'bg-[#00C389] text-white'
-                  : 'bg-white text-gray-800'
-              }`}
-            >
-              {message.content}
-              <div className="text-xs mt-1 text-right opacity-70">
-                {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </div>
-            </div>
-          </div>
-        ))}
-        
-        {isLoading && (
-          <div className="self-start bg-white p-3 rounded-2xl text-gray-800">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce"></div>
-              <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-              <div className="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
-            </div>
-          </div>
+            <i className="fas fa-share mr-2"></i> Send to Doctor
+          </Button>
+        )}
+        {activeTab === "doctor-chat" && (
+          <Button 
+            variant="secondary" 
+            size="sm" 
+            className="bg-white text-primary hover:bg-gray-100"
+            onClick={() => navigate('/patient/find-doctor')}
+          >
+            <i className="fas fa-user-md mr-2"></i> Find Doctor
+          </Button>
         )}
       </div>
-      
-      {/* Live Voice Chat Section */}
-      <div className="bg-white p-4 rounded-t-3xl">
-        <div className="font-semibold text-lg mb-2">Live Voice Chat</div>
+
+      {/* Tabs */}
+      <Tabs 
+        defaultValue="ai-chat" 
+        value={activeTab} 
+        onValueChange={setActiveTab} 
+        className="flex-1 flex flex-col"
+      >
+        <TabsList className="grid grid-cols-2 mx-4 mt-2 bg-gray-100">
+          <TabsTrigger 
+            value="ai-chat" 
+            className="flex items-center gap-1 data-[state=active]:bg-primary data-[state=active]:text-white"
+          >
+            <Bot className="h-4 w-4" />
+            <span>AI Chat</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="doctor-chat" 
+            className="flex items-center gap-1 data-[state=active]:bg-primary data-[state=active]:text-white"
+          >
+            <User className="h-4 w-4" />
+            <span>Chat with Doctor</span>
+          </TabsTrigger>
+        </TabsList>
         
-        <div className="bg-gray-100 p-4 rounded-xl mb-4">
-          <div className="flex justify-center">
-            <button 
-              className={`w-14 h-14 flex items-center justify-center rounded-full ${isListening ? 'bg-red-500' : 'bg-[#00C389]'}`}
-              onClick={isListening ? stopListening : startListening}
-            >
-              <Mic size={24} color="white" />
-            </button>
+        {/* AI Chat Tab */}
+        <TabsContent value="ai-chat" className="flex-1 flex flex-col pb-16">
+          {/* Chat Messages Container */}
+          <div 
+            id="chat-container" 
+            ref={chatContainerRef}
+            className="flex-1 overflow-y-auto p-4 pb-20 space-y-4"
+          >
+            {messages.map((message) => (
+              <div 
+                key={message.id} 
+                className={`message ${message.isUser ? "user flex justify-end" : "ai flex justify-start"}`}
+              >
+                <div 
+                  className={`message-bubble max-w-[75%] rounded-2xl p-3 ${
+                    message.isUser 
+                      ? "bg-primary text-white rounded-tr-none" 
+                      : "bg-gray-100 rounded-tl-none"
+                  }`}
+                >
+                  {message.isUser ? (
+                    <p>{message.content}</p>
+                  ) : (
+                    <div className="formatted-message">
+                      {formatAIMessage(message.content)}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+            
+            {isLoading && (
+              <div className="message ai flex justify-start">
+                <div className="message-bubble max-w-[75%] rounded-2xl p-3 bg-gray-100 rounded-tl-none">
+                  <span>Thinking</span>
+                  <div className="thinking-dots inline-flex ml-1">
+                    <span className="animate-pulse">.</span>
+                    <span className="animate-pulse delay-75">.</span>
+                    <span className="animate-pulse delay-150">.</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <div className="text-center text-gray-500 mt-2">
-            {isListening ? 'Voice Mode: On' : 'Voice Mode: Off'}
-          </div>
-          
-          <div className="mt-4 flex items-center">
-            <input
+
+          {/* Chat Input Box - Fixed Position */}
+          <div className="chat-input-box p-3 bg-white border-t shadow-md flex items-center gap-2 fixed bottom-16 left-0 right-0 z-10">
+            <Input
+              id="chat-input"
               type="text"
-              placeholder="Type a message..."
-              className="flex-1 p-2 border border-gray-300 rounded-l-lg focus:outline-none"
+              placeholder={isListening ? "Listening..." : "Type a message..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  if (input.trim()) {
-                    sendMessage();
-                  }
-                }
-              }}
+              onKeyPress={(e) => e.key === "Enter" && sendMessage()}
+              className="flex-1"
             />
-            <button 
-              className="bg-gray-200 p-2 rounded-r-lg border border-gray-300 border-l-0"
-              onClick={() => {
-                if (input.trim()) {
-                  sendMessage();
-                }
-              }}
+            <Button
+              id="mic-btn"
+              variant="outline"
+              size="icon"
+              onClick={isListening ? stopListening : startListening}
+              className={isListening ? "bg-red-500 text-white" : ""}
             >
-              <ChevronRight size={20} />
-            </button>
+              <i className={`fas ${isListening ? "fa-microphone-slash" : "fa-microphone"}`}></i>
+            </Button>
+            <Button
+              id="send-btn"
+              onClick={() => sendMessage()}
+              disabled={!input.trim() || isLoading}
+            >
+              <i className="fas fa-paper-plane"></i>
+            </Button>
           </div>
-        </div>
-      </div>
+        </TabsContent>
+        
+        {/* Doctor Chat Tab */}
+        <TabsContent value="doctor-chat" className="flex-1 overflow-hidden pb-16">
+          <div className="p-4 pb-20 h-full flex flex-col">
+            {loadingDoctorChats ? (
+              <div className="flex items-center justify-center py-8 flex-grow">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : doctorChats.length > 0 ? (
+              <div className="space-y-3 overflow-y-auto">
+                {doctorChats.map((chat) => (
+                  <Card 
+                    key={chat.id} 
+                    className="cursor-pointer hover:shadow-sm transition-shadow"
+                    onClick={() => navigate(`/patient/chat/${chat.id}`)}
+                  >
+                    <div className="flex items-center justify-between p-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-primary/10 rounded-full p-2">
+                          <User className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{chat.name}</p>
+                          <p className="text-sm text-gray-500 truncate max-w-[180px]">
+                            {chat.lastMessage}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500">{chat.time}</p>
+                        {chat.unread > 0 && (
+                          <span className="bg-primary text-white text-xs rounded-full px-2 py-0.5 mt-1 inline-block">
+                            {chat.unread}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-12 flex-grow text-center">
+                <MessageSquare className="h-16 w-16 text-gray-300 mb-4" />
+                <h3 className="text-lg font-medium">No Conversations Yet</h3>
+                <p className="text-gray-500 mb-6">Start a conversation with a doctor</p>
+                <Button onClick={() => navigate('/patient/find-doctor')}>
+                  Find a Doctor
+                </Button>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
+      
+      {/* Chat History Dialog */}
+      <Dialog open={showHistory} onOpenChange={setShowHistory}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex justify-between items-center">
+              <span>Chat History</span>
+              <Button variant="ghost" size="sm" onClick={() => setShowHistory(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="max-h-[70vh] overflow-y-auto">
+            {loadingHistory ? (
+              <div className="flex justify-center p-4">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+              </div>
+            ) : chatHistory.length > 0 ? (
+              <div className="space-y-2">
+                {chatHistory.map((item) => (
+                  <div 
+                    key={item.id}
+                    className="border rounded-lg p-3 cursor-pointer hover:bg-gray-50"
+                    onClick={() => loadChatSession(item)}
+                  >
+                    <div className="flex justify-between">
+                      <p className="font-medium">{item.summary}</p>
+                      <p className="text-sm text-gray-500">
+                        {item.date.toLocaleDateString()}
+                      </p>
+                    </div>
+                    <p className="text-sm text-gray-600 truncate">
+                      {item.messages.length} messages
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center p-4 text-gray-500">
+                <Bot className="h-12 w-12 mx-auto text-gray-300 mb-2" />
+                <p>No chat history found</p>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* FontAwesome CDN */}
+      <link
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css"
+        rel="stylesheet"
+      />
+      
+      <style>
+        {`
+          .thinking-dots span {
+            animation-duration: 1.4s;
+            animation-iteration-count: infinite;
+            animation-fill-mode: both;
+          }
+          .thinking-dots span:nth-child(2) {
+            animation-delay: 0.2s;
+          }
+          .thinking-dots span:nth-child(3) {
+            animation-delay: 0.4s;
+          }
+          @keyframes pulse {
+            0%, 80%, 100% { opacity: 0; }
+            40% { opacity: 1; }
+          }
+          .animate-pulse {
+            animation: pulse 1.4s infinite;
+          }
+          .delay-75 {
+            animation-delay: 0.2s;
+          }
+          .delay-150 {
+            animation-delay: 0.4s;
+          }
+          .formatted-message h4 {
+            color: #3b82f6;
+            font-weight: bold;
+            margin-top: 0.5rem;
+          }
+          .formatted-message ul, .formatted-message ol {
+            margin-left: 1.5rem;
+          }
+          .formatted-message li {
+            margin-bottom: 0.25rem;
+          }
+          .formatted-message strong {
+            font-weight: bold;
+          }
+        `}
+      </style>
       
       {/* Bottom Navigation */}
-      <div className="bg-white pt-2 pb-6 px-4 flex justify-around items-center">
-        <button 
-          className="flex flex-col items-center justify-center text-gray-500"
-          onClick={() => navigate("/patient")}
-        >
-          <Home size={22} />
-          <span className="text-xs mt-1">Home</span>
-        </button>
-        
-        <button 
-          className="flex flex-col items-center justify-center text-gray-500"
-          onClick={() => navigate("/patient/vitals")}
-        >
-          <Activity size={22} />
-          <span className="text-xs mt-1">Vitals</span>
-        </button>
-        
-        <button 
-          className="flex flex-col items-center justify-center text-gray-500"
-          onClick={() => navigate("/patient/find-doctor")}
-        >
-          <Search size={22} />
-          <span className="text-xs mt-1">Find Doctor</span>
-        </button>
-        
-        <button 
-          className="flex flex-col items-center justify-center text-[#00C389]"
-        >
-          <MessageSquare size={22} />
-          <span className="text-xs mt-1">Chat</span>
-        </button>
-        
-        <button 
-          className="flex flex-col items-center justify-center text-gray-500"
-          onClick={() => navigate("/patient/profile")}
-        >
-          <User size={22} />
-          <span className="text-xs mt-1">Profile</span>
-        </button>
-      </div>
+      <BottomNavigation />
     </div>
   );
 } 

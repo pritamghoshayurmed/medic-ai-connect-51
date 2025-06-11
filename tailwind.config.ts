@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -25,8 +26,8 @@ export default {
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
 				primary: {
-					DEFAULT: 'hsl(var(--primary))',
-					foreground: 'hsl(var(--primary-foreground))'
+					DEFAULT: '#2563EB', // Blue color from the design
+					foreground: '#FFFFFF'
 				},
 				secondary: {
 					DEFAULT: 'hsl(var(--secondary))',
@@ -61,16 +62,6 @@ export default {
 					'accent-foreground': 'hsl(var(--sidebar-accent-foreground))',
 					border: 'hsl(var(--sidebar-border))',
 					ring: 'hsl(var(--sidebar-ring))'
-				},
-				kabiraj: {
-					primary: 'hsl(187, 100%, 16%)', // #004953
-					secondary: 'hsl(187, 100%, 19%)', // #006064
-					dark: 'hsl(187, 100%, 11%)', // #00363a
-					accent: 'hsl(162, 100%, 38%)', // #00C389
-					'accent-hover': 'hsl(162, 100%, 31%)', // #00A070
-					'accent-light': 'hsl(162, 100%, 96%)', // #F5FBFA
-					'primary-light': 'hsl(187, 100%, 96%)', // Light version of primary
-					'primary-dark': 'hsl(187, 100%, 8%)' // Darker version of primary
 				}
 			},
 			borderRadius: {
