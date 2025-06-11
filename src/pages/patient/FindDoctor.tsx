@@ -1,483 +1,464 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Calendar } from "@/components/ui/calendar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronLeft, Search, Clock, CalendarIcon, MessageSquare, AlertTriangle } from "lucide-react";
-import { format } from "date-fns";
-import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import DoctorCard from "@/components/DoctorCard";
-import BottomNavigation from "@/components/BottomNavigation";
-import { Doctor } from "@/types";
-import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { ChevronLeft, MapPin } from "lucide-react";
+import styled from "styled-components";
 
-// Available time slots
-const TIME_SLOTS = [
-  "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM",
-  "11:00 AM", "11:30 AM", "12:00 PM", "12:30 PM",
-  "02:00 PM", "02:30 PM", "03:00 PM", "03:30 PM",
-  "04:00 PM", "04:30 PM", "05:00 PM"
-];
+// Styled components for the new design
+const PageContainer = styled.div`
+  background: linear-gradient(135deg, #004953 0%, #006064 50%, #00363a 100%);
+  min-height: 100vh;
+  color: white;
+  font-family: 'Roboto', sans-serif;
+  padding-bottom: 80px;
+`;
 
-// Specialties for filtering
-const SPECIALTIES = [
-  "All Specialties",
-  "General Practitioner",
-  "Cardiologist",
-  "Dermatologist",
-  "Neurologist",
-  "Pediatrician",
-  "Psychiatrist",
-  "Orthopedic"
-];
+const Header = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+`;
+
+const BackButton = styled.button`
+  background: none;
+  border: none;
+  color: white;
+  margin-right: 15px;
+  cursor: pointer;
+`;
+
+const PageTitle = styled.h1`
+  font-size: 24px;
+  font-weight: 600;
+`;
+
+const SubTitle = styled.p`
+  font-size: 16px;
+  padding: 0 20px;
+  margin-bottom: 20px;
+  opacity: 0.9;
+`;
+
+const SearchContainer = styled.div`
+  margin: 0 20px 20px;
+`;
+
+const SearchBar = styled.div`
+  position: relative;
+  margin-bottom: 15px;
+`;
+
+const SearchInput = styled.input`
+  width: 100%;
+  padding: 15px 20px;
+  padding-left: 50px;
+  border-radius: 30px;
+  border: none;
+  font-size: 16px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  outline: none;
+  
+  &::placeholder {
+    color: #999;
+  }
+`;
+
+const SearchIcon = styled.div`
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+`;
+
+const FilterRow = styled.div`
+  display: flex;
+  gap: 10px;
+  margin-bottom: 15px;
+`;
+
+const FilterButton = styled.button`
+  background-color: white;
+  color: #333;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 15px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #f5f5f5;
+  }
+`;
+
+const LocationButton = styled.button`
+  display: flex;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 20px;
+  padding: 8px 15px;
+  color: white;
+  font-size: 14px;
+  margin-left: auto;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+`;
+
+const DoctorsSection = styled.div`
+  margin: 0 20px;
+`;
+
+const SectionTitle = styled.h2`
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 15px;
+`;
+
+const DoctorCard = styled.div`
+  background-color: white;
+  border-radius: 15px;
+  margin-bottom: 15px;
+  padding: 15px;
+  color: #333;
+`;
+
+const DoctorHeader = styled.div`
+  display: flex;
+  margin-bottom: 10px;
+`;
+
+const DoctorAvatar = styled.div`
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+  margin-right: 15px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+const DoctorInfo = styled.div`
+  flex: 1;
+`;
+
+const DoctorName = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 5px;
+`;
+
+const DoctorSpecialty = styled.p`
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 5px;
+`;
+
+const DoctorStatus = styled.div`
+  display: flex;
+  align-items: center;
+`;
+
+const OnlineStatus = styled.div`
+  width: 40px;
+  height: 22px;
+  background-color: #00C389;
+  border-radius: 12px;
+  position: relative;
+  margin-right: 10px;
+  
+  &:after {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    background-color: white;
+    border-radius: 50%;
+    top: 2px;
+    right: 2px;
+  }
+`;
+
+const StatusText = styled.span`
+  font-size: 14px;
+  color: #00C389;
+`;
+
+const RatingRow = styled.div`
+  display: flex;
+  align-items: center;
+  margin-top: 5px;
+`;
+
+const Rating = styled.span`
+  font-size: 14px;
+  font-weight: 500;
+  margin-right: 5px;
+`;
+
+const ExperienceText = styled.span`
+  font-size: 14px;
+  color: #666;
+  &::before {
+    content: '•';
+    margin: 0 5px;
+  }
+`;
+
+const ActionRow = styled.div`
+  display: flex;
+  margin-top: 15px;
+  gap: 10px;
+`;
+
+const ProfileButton = styled.button`
+  flex: 1;
+  padding: 10px 0;
+  background-color: #f0f0f0;
+  color: #333;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #e5e5e5;
+  }
+`;
+
+const AppointmentButton = styled.button`
+  flex: 1;
+  padding: 10px 0;
+  background-color: #00C389;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  
+  &:hover {
+    background-color: #00A070;
+  }
+`;
+
+const BottomNav = styled.div`
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 70px;
+  background-color: white;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+`;
+
+const NavItem = styled.div<{ active?: boolean }>`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: ${props => props.active ? '#00C389' : '#777'};
+  font-size: 12px;
+  cursor: pointer;
+`;
+
+const NavIcon = styled.div`
+  margin-bottom: 5px;
+`;
 
 export default function FindDoctor() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { toast } = useToast();
   const { user } = useAuth();
-  
-  // Get selected doctor from query params if available
-  const searchParams = new URLSearchParams(location.search);
-  const preSelectedDoctorId = searchParams.get('selected');
-  
-  // Check if we have chat data from the location state
-  const chatData = location.state?.fromChat ? {
-    fromChat: location.state.fromChat,
-    chatSummary: location.state.chatSummary,
-    summaryText: location.state.summaryText,
-    doctorList: location.state.doctorList
-  } : null;
-  
   const [searchQuery, setSearchQuery] = useState("");
-  const [specialty, setSpecialty] = useState("All Specialties");
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
-  const [appointmentDoctors, setAppointmentDoctors] = useState<Doctor[]>([]);
-  const [loading, setLoading] = useState(true);
   
-  // Appointment booking state
-  const [bookingOpen, setBookingOpen] = useState(false);
-  const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
-  const [date, setDate] = useState<Date | undefined>(undefined);
-  const [timeSlot, setTimeSlot] = useState<string | undefined>(undefined);
-  const [reason, setReason] = useState(chatData?.summaryText || "");
-  const [bookingLoading, setBookingLoading] = useState(false);
+  const [doctors, setDoctors] = useState([
+    {
+      id: 1,
+      name: "Priya Sharma",
+      specialty: "General Practitioner",
+      rating: 4.8,
+      reviews: 5,
+      experience: "5 years exp",
+      online: true
+    },
+    {
+      id: 2,
+      name: "Samridhya Dey",
+      specialty: "General Practitioner",
+      rating: 4.8,
+      reviews: 5,
+      experience: "5 years exp",
+      online: true
+    },
+    {
+      id: 3,
+      name: "Koushik Das",
+      specialty: "General Practitioner",
+      rating: 4.8,
+      reviews: 5,
+      experience: "5 years exp",
+      online: false
+    },
+  ]);
   
-  // Flag to show only appointed doctors
-  const [showOnlyAppointedDoctors, setShowOnlyAppointedDoctors] = useState(
-    chatData?.doctorList && chatData.doctorList.length > 0
-  );
-  
-  useEffect(() => {
-    const fetchDoctors = async () => {
-      try {
-        setLoading(true);
-        const { data, error } = await supabase
-          .from('profiles')
-          .select(`
-            *,
-            doctor_profiles(*)
-          `)
-          .eq('role', 'doctor');
-          
-        if (error) {
-          console.error("Error fetching doctors:", error);
-          throw error;
-        }
-        
-        // Transform data to our Doctor interface
-        const formattedDoctors = data.map(doc => ({
-          id: doc.id,
-          name: doc.full_name || 'Dr. Unknown',
-          email: doc.email || '',
-          phone: doc.phone || '',
-          role: 'doctor' as const,
-          specialty: doc.doctor_profiles?.[0]?.specialty || 'General Practitioner',
-          experience: doc.doctor_profiles?.[0]?.experience_years || 5,
-          rating: 4.8,
-          profilePic: '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png'
-        }));
-        
-        setDoctors(formattedDoctors);
-        
-        // If we have a doctorList from chat data, filter to those doctors
-        if (chatData?.doctorList && chatData.doctorList.length > 0) {
-          const doctorIds = chatData.doctorList.map((d: any) => d.id);
-          const appointedDocs = formattedDoctors.filter(doc => 
-            doctorIds.includes(doc.id)
-          );
-          setAppointmentDoctors(appointedDocs);
-          setFilteredDoctors(appointedDocs);
-        } else {
-          setFilteredDoctors(formattedDoctors);
-        }
-        
-        // If there's a preselected doctor, open the booking dialog
-        if (preSelectedDoctorId) {
-          const doctor = formattedDoctors.find(d => d.id === preSelectedDoctorId);
-          if (doctor) {
-            setSelectedDoctor(doctor);
-            setBookingOpen(true);
-          }
-        }
-      } catch (error) {
-        console.error("Error:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchDoctors();
-  }, [preSelectedDoctorId, chatData]);
-  
-  // Filter doctors when search query or specialty changes
-  useEffect(() => {
-    // Start with either all doctors or only those with appointments
-    let filtered = showOnlyAppointedDoctors ? [...appointmentDoctors] : [...doctors];
-    
-    // Apply search filter
-    if (searchQuery) {
-      filtered = filtered.filter(doctor => 
-        doctor.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-    
-    // Apply specialty filter
-    if (specialty !== "All Specialties") {
-      filtered = filtered.filter(doctor => 
-        doctor.specialty === specialty
-      );
-    }
-    
-    setFilteredDoctors(filtered);
-  }, [searchQuery, specialty, doctors, appointmentDoctors, showOnlyAppointedDoctors]);
-  
-  const handleBookAppointment = (doctor: Doctor) => {
-    setSelectedDoctor(doctor);
-    setBookingOpen(true);
-    // Reset form values
-    setDate(undefined);
-    setTimeSlot(undefined);
-    setReason("");
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
   };
   
-  const handleCreateAppointment = async () => {
-    if (!user || !selectedDoctor || !date || !timeSlot) {
-      toast({
-        title: "Missing information",
-        description: "Please select a date and time for your appointment.",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    setBookingLoading(true);
-    
-    try {
-      // Create appointment in database
-      const { data, error } = await supabase
-        .from('appointments')
-        .insert({
-          patient_id: user.id,
-          doctor_id: selectedDoctor.id,
-          appointment_date: format(date, "yyyy-MM-dd"),
-          appointment_time: timeSlot,
-          status: 'pending',
-          symptoms: reason || 'General checkup',
-        })
-        .select();
-        
-      if (error) {
-        throw error;
-      }
-      
-      toast({
-        title: "Appointment requested!",
-        description: "Your appointment request has been sent to the doctor.",
-      });
-      
-      // Close dialog and redirect to appointments page
-      setBookingOpen(false);
-      navigate("/patient/appointments");
-      
-    } catch (error) {
-      console.error("Error creating appointment:", error);
-      toast({
-        title: "Error",
-        description: "There was a problem booking your appointment. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setBookingLoading(false);
-    }
+  const viewProfile = (id: number) => {
+    navigate(`/patient/doctor-profile/${id}`);
   };
   
-  const handleSendChatToDoctor = async (doctor: Doctor) => {
-    if (!user || !chatData) {
-      toast({
-        title: "Error",
-        description: "No chat data available to send",
-        variant: "destructive",
-      });
-      return;
-    }
-    
-    try {
-      setBookingLoading(true);
-      
-      // Insert a new message with the chat data
-      const { data, error } = await supabase
-        .from('messages')
-        .insert({
-          sender_id: user.id,
-          receiver_id: doctor.id,
-          content: chatData.chatSummary,
-          timestamp: new Date().toISOString(),
-          read: false,
-          is_ai_chat: true // Flag to identify this is an AI chat summary
-        })
-        .select();
-        
-      if (error) throw error;
-      
-      toast({
-        title: "Success!",
-        description: `Chat summary sent to ${doctor.name}`,
-      });
-      
-      // Navigate back to the chat page
-      navigate("/patient/chat");
-      
-    } catch (error) {
-      console.error("Error sending chat to doctor:", error);
-      toast({
-        title: "Error",
-        description: "Failed to send chat to doctor. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setBookingLoading(false);
-    }
+  const bookAppointment = (id: number) => {
+    navigate(`/patient/book-appointment/${id}`);
   };
   
   return (
-    <div className="pb-24">
-      {/* Header */}
-      <div className="bg-white shadow p-4 flex items-center">
-        <Button variant="ghost" size="icon" className="mr-2" onClick={() => navigate(-1)}>
-          <ChevronLeft />
-        </Button>
-        <h1 className="text-xl font-bold">Find Doctor</h1>
-        {chatData && (
-          <Badge variant="secondary" className="ml-auto">
-            <MessageSquare className="h-3 w-3 mr-1" />
-            Sending Chat
-          </Badge>
-        )}
-      </div>
+    <PageContainer>
+      <Header>
+        <BackButton onClick={() => navigate("/patient")}>
+          <ChevronLeft size={24} />
+        </BackButton>
+        <PageTitle>Find Doctor</PageTitle>
+      </Header>
       
-      {/* Chat Summary Card (if coming from chat) */}
-      {chatData && (
-        <Card className="m-4 p-3 bg-primary/10 border-primary/30">
-          <p className="text-sm font-medium mb-2">You're sending an AI chat summary:</p>
-          <p className="text-sm text-gray-600 line-clamp-2">{chatData.summaryText}</p>
-          
-          {chatData.doctorList && chatData.doctorList.length > 0 && (
-            <div className="mt-3 flex items-center justify-between">
-              <p className="text-xs text-primary font-medium">
-                Showing doctors with appointments
-              </p>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="text-xs h-7 border-primary text-primary"
-                onClick={() => setShowOnlyAppointedDoctors(!showOnlyAppointedDoctors)}
-              >
-                {showOnlyAppointedDoctors ? "Show All Doctors" : "Show Only My Doctors"}
-              </Button>
-            </div>
-          )}
-          
-          {chatData.doctorList === null && (
-            <div className="mt-3 flex items-center text-amber-600 bg-amber-50 p-2 rounded-md">
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              <p className="text-xs">You don't have any confirmed appointments with doctors.</p>
-            </div>
-          )}
-        </Card>
-      )}
+      <SubTitle>
+        Follow the steps to measure your BP<br />
+        using PPG technology
+      </SubTitle>
       
-      {/* Search */}
-      <div className="p-4">
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-          <Input
-            placeholder="Search doctors..."
-            className="pl-10"
+      <SearchContainer>
+        <SearchBar>
+          <SearchIcon>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </SearchIcon>
+          <SearchInput 
+            type="text" 
+            placeholder="Search doctors..." 
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={handleSearch}
           />
-        </div>
+        </SearchBar>
         
-        <div className="mb-4">
-          <Select value={specialty} onValueChange={setSpecialty}>
-            <SelectTrigger>
-              <SelectValue placeholder="Filter by specialty" />
-            </SelectTrigger>
-            <SelectContent>
-              {SPECIALTIES.map((spec) => (
-                <SelectItem key={spec} value={spec}>
-                  {spec}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+        <FilterRow>
+          <FilterButton>All Specialties</FilterButton>
+          <LocationButton>
+            <MapPin size={16} style={{ marginRight: '5px' }} />
+            Set Location
+          </LocationButton>
+        </FilterRow>
+      </SearchContainer>
       
-      {/* Doctor List */}
-      <div className="px-4">
-        <h2 className="text-lg font-bold mb-4">
-          {chatData 
-            ? showOnlyAppointedDoctors && chatData.doctorList?.length > 0
-              ? "Your Doctors:"
-              : "Select a doctor to send your chat to:"
-            : "Available Doctors"
-          }
-        </h2>
+      <DoctorsSection>
+        <SectionTitle>Available Doctors</SectionTitle>
         
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary"></div>
-          </div>
-        ) : filteredDoctors.length > 0 ? (
-          filteredDoctors.map((doctor) => (
-            <DoctorCard
-              key={doctor.id}
-              doctor={doctor}
-              onBookAppointment={() => chatData ? handleSendChatToDoctor(doctor) : handleBookAppointment(doctor)}
-              onViewProfile={() => navigate(`/patient/doctor-profile/${doctor.id}`)}
-              actionText={chatData ? "Send Chat" : "Book Appointment"}
-              actionVariant={chatData ? "secondary" : "default"}
-            />
-          ))
-        ) : (
-          <div className="text-center py-12 bg-gray-50 rounded-lg">
-            <p className="text-gray-500">
-              {showOnlyAppointedDoctors 
-                ? "No doctors found with appointments matching your criteria" 
-                : "No doctors found matching your criteria"}
-            </p>
-            {showOnlyAppointedDoctors && (
-              <Button 
-                variant="link" 
-                className="mt-2 text-primary" 
-                onClick={() => setShowOnlyAppointedDoctors(false)}
-              >
-                Show all doctors
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
+        {doctors.map(doctor => (
+          <DoctorCard key={doctor.id}>
+            <DoctorHeader>
+              <DoctorAvatar>
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="12" cy="7" r="4"></circle>
+                </svg>
+              </DoctorAvatar>
+              
+              <DoctorInfo>
+                <DoctorName>{doctor.name}</DoctorName>
+                <DoctorSpecialty>{doctor.specialty}</DoctorSpecialty>
+                <RatingRow>
+                  <Rating>{doctor.rating}</Rating>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" stroke="#FFD700" strokeWidth="1">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                  </svg>
+                  <span style={{ fontSize: '14px', color: '#666', marginLeft: '5px' }}>{doctor.reviews}</span>
+                  <ExperienceText>{doctor.experience}</ExperienceText>
+                </RatingRow>
+              </DoctorInfo>
+              
+              <DoctorStatus>
+                {doctor.online && (
+                  <>
+                    <OnlineStatus />
+                    <StatusText>Online</StatusText>
+                  </>
+                )}
+              </DoctorStatus>
+            </DoctorHeader>
+            
+            <ActionRow>
+              <ProfileButton onClick={() => viewProfile(doctor.id)}>
+                View Profile
+              </ProfileButton>
+              <AppointmentButton onClick={() => bookAppointment(doctor.id)}>
+                Book Appointment
+              </AppointmentButton>
+            </ActionRow>
+          </DoctorCard>
+        ))}
+      </DoctorsSection>
       
-      {/* Booking Dialog */}
-      <Dialog open={bookingOpen} onOpenChange={setBookingOpen}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Book Appointment</DialogTitle>
-          </DialogHeader>
-          
-          {selectedDoctor && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3 pb-2 border-b">
-                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-white text-xl font-bold">
-                  {selectedDoctor.name.charAt(0)}
-                </div>
-                <div>
-                  <h3 className="font-bold">{selectedDoctor.name}</h3>
-                  <p className="text-sm text-gray-600">{selectedDoctor.specialty}</p>
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Select Date</label>
-                <div className="border rounded-md p-1">
-                  <Calendar
-                    mode="single"
-                    selected={date}
-                    onSelect={setDate}
-                    disabled={(date) => {
-                      // Disable past dates and weekends
-                      const today = new Date();
-                      today.setHours(0, 0, 0, 0);
-                      return (
-                        date < today ||
-                        date.getDay() === 0 ||
-                        date.getDay() === 6
-                      );
-                    }}
-                    className="rounded-md"
-                  />
-                </div>
-              </div>
-              
-              {date && (
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Select Time</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {TIME_SLOTS.map((time) => (
-                      <button
-                        key={time}
-                        className={`p-2 rounded-md text-sm flex items-center justify-center gap-1 ${
-                          timeSlot === time
-                            ? "bg-primary text-white"
-                            : "bg-gray-100 hover:bg-gray-200"
-                        }`}
-                        onClick={() => setTimeSlot(time)}
-                      >
-                        <Clock className="h-3 w-3" />
-                        {time}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              <div className="space-y-2">
-                <label htmlFor="reason" className="text-sm font-medium">Reason for Visit (Optional)</label>
-                <textarea
-                  id="reason"
-                  rows={3}
-                  className="w-full p-2 border rounded-md resize-none"
-                  placeholder="Describe your symptoms or reason for appointment..."
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                ></textarea>
-              </div>
-            </div>
-          )}
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBookingOpen(false)}>Cancel</Button>
-            <Button 
-              onClick={handleCreateAppointment} 
-              disabled={!date || !timeSlot || bookingLoading}
-            >
-              {bookingLoading ? "Booking..." : "Book Appointment"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      <BottomNavigation />
-    </div>
+      <BottomNav>
+        <NavItem onClick={() => navigate("/patient")}>
+          <NavIcon>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+            </svg>
+          </NavIcon>
+          Home
+        </NavItem>
+        
+        <NavItem onClick={() => navigate("/patient/vitals")}>
+          <NavIcon>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+            </svg>
+          </NavIcon>
+          Vitals
+        </NavItem>
+        
+        <NavItem active>
+          <NavIcon>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </NavIcon>
+          Find Doctor
+        </NavItem>
+        
+        <NavItem onClick={() => navigate("/patient/chat")}>
+          <NavIcon>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+          </NavIcon>
+          Chat
+        </NavItem>
+        
+        <NavItem onClick={() => navigate("/patient/profile")}>
+          <NavIcon>
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+              <circle cx="12" cy="7" r="4"></circle>
+            </svg>
+          </NavIcon>
+          Profile
+        </NavItem>
+      </BottomNav>
+    </PageContainer>
   );
 }

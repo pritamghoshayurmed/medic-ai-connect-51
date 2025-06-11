@@ -2,36 +2,51 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Routes, Route, Navigate, useRoutes } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import { useEffect } from "react";
-import { initializeDatabase, initializeUserTriggers } from "./utils/databaseInit";
+import { ThemeProvider } from "next-themes";
+import { createGlobalStyle } from 'styled-components';
 
 // Error Boundary Components
 import ErrorBoundary from "./components/ErrorBoundary";
 import PageErrorBoundary from "./components/PageErrorBoundary";
 
-// Pages
-import Index from "./pages/Index";
-import NotFound from "./pages/NotFound";
+// Auth Pages
+import SplashScreen from "./pages/auth/SplashScreen";
 import Login from "./pages/auth/Login";
-import Signup from "./pages/auth/Signup";
+import SignUp from "./pages/auth/Signup";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+
+// Pages
+import NotFound from "./pages/NotFound";
 import PatientDashboard from "./pages/patient/Dashboard";
 import DoctorDashboard from "./pages/doctor/Dashboard";
-import FindDoctor from "./pages/patient/FindDoctor";
-import Appointments from "./pages/patient/Appointments";
-import Chat from "./pages/Chat";
-import DoctorChat from "./pages/doctor/DoctorChat";
-import AiAssistant from "./pages/patient/AiAssistant";
-import PatientAIChat from "./pages/patient/PatientAIChat";
-import MedicationReminders from "./pages/patient/MedicationReminders";
+
+// Patient Pages
+import PatientVitals from "./pages/patient/Vitals";
+import PatientFindDoctor from "./pages/patient/FindDoctor";
+import PatientAppointments from "./pages/patient/Appointments";
 import PatientProfile from "./pages/patient/Profile";
-import DoctorProfile from "./pages/doctor/Profile";
-import PatientDoctorProfile from "./pages/patient/DoctorProfile";
-import DoctorAppointments from "./pages/doctor/Appointments";
-import DoctorAnalytics from "./pages/doctor/Analytics";
-import DiagnosisEngine from "./pages/doctor/DiagnosisEngine";
-import DoctorChatRooms from "./pages/doctor/ChatRooms";
+import DoctorProfile from "./pages/patient/DoctorProfile";
+import MedicationReminders from "./pages/patient/MedicationReminders";
+import PatientAIChat from "./pages/patient/PatientAIChat";
+import DoctorPatientChat from "./pages/patient/DoctorPatientChat";
+import PatientChat from "./pages/patient/Chat";
+
+const GlobalStyle = createGlobalStyle`
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Roboto', sans-serif;
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+  }
+`;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,212 +61,161 @@ const queryClient = new QueryClient({
 const ProtectedRoute = ({ children, allowedRoles }: { children: React.ReactNode; allowedRoles: string[] }) => {
   const { user, isLoading } = useAuth();
 
+  // Mock user for development - remove or comment this for production
+  const BYPASS_AUTH = true;
+
   if (isLoading) {
     return <div className="flex h-screen items-center justify-center">Loading...</div>;
   }
 
-  if (!user || !allowedRoles.includes(user.role)) {
+  // Either check for valid user with correct role OR bypass authentication in dev mode
+  if ((!user || !allowedRoles.includes(user.role)) && !BYPASS_AUTH) {
     return <Navigate to="/login" replace />;
   }
 
-  // Wrap children with ErrorBoundary to prevent crashes in protected routes
   return <ErrorBoundary>{children}</ErrorBoundary>;
 };
 
-function AppWithAuth() {
-  // Initialize the database on app startup
-  useEffect(() => {
-    const init = async () => {
-      try {
-        await initializeDatabase();
-        await initializeUserTriggers();
-      } catch (error) {
-        console.error("Error initializing database:", error);
-      }
-    };
-    
-    init();
-  }, []);
-  
+function AppContent() {
   return (
     <>
+      <GlobalStyle />
+      <Routes>
+        {/* Auth routes */}
+        <Route path="/" element={<SplashScreen />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<SignUp />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+
+        {/* Patient routes */}
+        <Route
+          path="/patient"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/vitals"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientVitals />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/find-doctor"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientFindDoctor />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/appointments"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientAppointments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/profile"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/doctor-profile/:id"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <DoctorProfile />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/book-appointment/:id"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientAppointments />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/medication-reminders"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <MedicationReminders />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/ai-chat"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientAIChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/doctor-chat"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <DoctorPatientChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/doctor-chat/:id"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <DoctorPatientChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/chat"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientChat />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Doctor routes */}
+        <Route
+          path="/doctor"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DoctorDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch-all route */}
+        <Route path="*" element={<NotFound />} />
+      </Routes>
       <Toaster />
       <Sonner />
-      <ErrorBoundary>
-        <Routes>
-          {/* Public routes */}
-          <Route path="/" element={<Index />} errorElement={<PageErrorBoundary />} />
-          <Route path="/login" element={<Login />} errorElement={<PageErrorBoundary />} />
-          <Route path="/signup" element={<Signup />} errorElement={<PageErrorBoundary />} />
-
-          {/* Patient routes */}
-          <Route
-            path="/patient"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <PatientDashboard />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/find-doctor"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <FindDoctor />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/appointments"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <Appointments />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/chat/:id"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <Chat />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/ai-assistant"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <AiAssistant />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/ai-chat"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <PatientAIChat />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/medications"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <MedicationReminders />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/profile"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <PatientProfile />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/patient/doctor-profile/:id"
-            element={
-              <ProtectedRoute allowedRoles={['patient']}>
-                <PatientDoctorProfile />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-
-          {/* Doctor routes */}
-          <Route
-            path="/doctor"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorDashboard />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/doctor/appointments"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorAppointments />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/doctor/analytics"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorAnalytics />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/doctor/diagnosis"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <ErrorBoundary>
-                  <DiagnosisEngine />
-                </ErrorBoundary>
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/doctor/chat-rooms"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorChatRooms />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/doctor/chat/:id"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorChat />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-          <Route
-            path="/doctor/profile"
-            element={
-              <ProtectedRoute allowedRoles={['doctor']}>
-                <DoctorProfile />
-              </ProtectedRoute>
-            }
-            errorElement={<PageErrorBoundary />}
-          />
-
-          {/* Catch-all route */}
-          <Route path="*" element={<NotFound />} errorElement={<PageErrorBoundary />} />
-        </Routes>
-      </ErrorBoundary>
     </>
   );
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <AuthProvider>
-        <ErrorBoundary>
-          <AppWithAuth />
-        </ErrorBoundary>
-      </AuthProvider>
-    </TooltipProvider>
-  </QueryClientProvider>
+  <ErrorBoundary>
+    <ThemeProvider attribute="class" defaultTheme="light">
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <TooltipProvider>
+            <AppContent />
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
+  </ErrorBoundary>
 );
 
 export default App;

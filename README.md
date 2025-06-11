@@ -38,32 +38,48 @@ The platform integrates advanced Doctor AI capabilities including:
 - Supabase account (optional for full functionality)
 - Google Gemini API key is already hardcoded for demo purposes
 
-### Environment Setup
+### Quick Start
 
 1. Clone the repository
-2. The app is preconfigured with a Gemini API key, so you don't need to set it up for testing the AI functionality
-3. If you want to use your own API key, you can update it in the `.env.local` file:
-   ```
-   VITE_SUPABASE_URL=your-supabase-url
-   VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-   VITE_GEMINI_API_KEY=your-gemini-api-key
-   VITE_OPENAI_API_KEY=your-openai-api-key
+   ```bash
+   git clone https://github.com/pritamghoshayurmed/kabirajai.git
+   cd kabirajai
    ```
 
-### Installation
+2. Install dependencies
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
 
-```bash
-# Install dependencies
-npm install
+3. Start the development server
+   ```bash
+   npm run dev
+   # or
+   yarn dev
+   ```
 
-# Start development server
-npm run dev
+4. Open your browser and navigate to http://localhost:5173
 
-# Build for production
-npm run build
+### Environment Setup (Optional)
+
+The app is preconfigured with a Gemini API key for demo purposes. If you want to use your own API key, create a `.env.local` file in the root directory:
+
+```
+VITE_SUPABASE_URL=your-supabase-url
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+VITE_GEMINI_API_KEY=your-gemini-api-key
+VITE_OPENAI_API_KEY=your-openai-api-key
 ```
 
-The app will be available at http://localhost:8081
+### Build for Production
+
+```bash
+npm run build
+# or
+yarn build
+```
 
 ## Gemini API Implementation
 
@@ -95,6 +111,9 @@ src/
 ├── hooks/           # Custom React hooks
 ├── lib/             # Utility libraries
 ├── pages/           # Page components
+│   ├── doctor/      # Doctor-specific pages
+│   └── patient/     # Patient-specific pages
+├── routes/          # Application routing
 ├── services/        # API service functions
 ├── types/           # TypeScript types
 └── utils/           # Helper functions
