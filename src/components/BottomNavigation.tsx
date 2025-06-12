@@ -1,56 +1,102 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Calendar, MessageSquare, User, PlusCircle } from "lucide-react";
+import { Home, Activity, Search, MessageSquare, User, Calendar, Stethoscope } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 
-export default function BottomNavigation() {
+export function BottomNavigation() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
 
-  const isActive = (path: string) => location.pathname === path;
+  // Check if path starts with the given pattern
+  const isActive = (path: string) => {
+    // Special case for home (only exact match)
+    if (path === "/patient" || path === "/doctor") {
+      return location.pathname === path;
+    }
+    
+    return location.pathname.startsWith(path);
+  }
   
   const baseRoute = user?.role === "doctor" ? "/doctor" : "/patient";
 
-  const navigationItems = [
+  // Different navigation items for doctors and patients
+  const doctorNavigationItems = [
     {
-      icon: <Home size={24} />,
+      icon: <Home size={22} />,
       label: "Home",
-      path: baseRoute,
+      path: "/doctor",
     },
     {
-      icon: <Calendar size={24} />,
+      icon: <Calendar size={22} />,
       label: "Appointments",
-      path: `${baseRoute}/appointments`,
+      path: "/doctor/appointments",
     },
     {
-      icon: <PlusCircle size={24} className="text-primary" />,
-      label: user?.role === "patient" ? "Find Doctor" : "Diagnosis",
-      path: user?.role === "patient" ? `${baseRoute}/find-doctor` : `${baseRoute}/diagnosis`,
+      icon: <Stethoscope size={22} />,
+      label: "Diagnosis",
+      path: "/doctor/diagnosis-engine",
     },
     {
-      icon: <MessageSquare size={24} />,
+      icon: <MessageSquare size={22} />,
       label: "Chat",
-      path: user?.role === "patient" ? `${baseRoute}/ai-chat` : `${baseRoute}/chat-rooms`,
+      path: "/doctor/chat-rooms",
     },
     {
-      icon: <User size={24} />,
+      icon: <User size={22} />,
       label: "Profile",
-      path: `${baseRoute}/profile`,
+      path: "/doctor/profile",
     },
   ];
 
+  const patientNavigationItems = [
+    {
+      icon: <Home size={22} />,
+      label: "Home",
+      path: "/patient",
+    },
+    {
+      icon: <Activity size={22} />,
+      label: "Vitals",
+      path: "/patient/vitals",
+    },
+    {
+      icon: <Search size={22} />,
+      label: "Find Doctor",
+      path: "/patient/find-doctor",
+    },
+    {
+      icon: <MessageSquare size={22} />,
+      label: "Chat",
+      path: "/patient/chat",
+    },
+    {
+      icon: <User size={22} />,
+      label: "Profile",
+      path: "/patient/profile",
+    },
+  ];
+
+  // Select the appropriate navigation items based on user role
+  const navigationItems = user?.role === "doctor" ? doctorNavigationItems : patientNavigationItems;
+
   return (
-    <div className="bottom-nav">
+    <div className="fixed bottom-0 left-0 right-0 bg-white border-t h-[70px] flex justify-around items-center z-50">
       {navigationItems.map((item, index) => (
         <button
           key={index}
-          className={`bottom-nav-item ${isActive(item.path) ? "active" : ""}`}
+          className={`flex flex-col items-center justify-center w-1/5 h-full ${
+            isActive(item.path) ? "text-[#00C389]" : "text-muted-foreground"
+          }`}
           onClick={() => navigate(item.path)}
         >
-          {item.icon}
+          <div className={`${isActive(item.path) ? "text-[#00C389]" : "text-muted-foreground"}`}>
+            {item.icon}
+          </div>
           <span className="text-xs mt-1">{item.label}</span>
         </button>
       ))}
     </div>
   );
 }
+
+export default BottomNavigation;

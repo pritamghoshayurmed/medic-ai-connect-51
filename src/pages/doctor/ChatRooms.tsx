@@ -296,95 +296,41 @@ export default function DoctorChatRooms() {
   };
 
   return (
-    <div className="pb-24">
+    <div className="pb-24 min-h-screen" style={{background: 'linear-gradient(135deg, #005A7A, #002838)'}}>
       {/* Header */}
-      <div className="bg-primary text-white p-4 flex items-center">
-        <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
-          <ChevronLeft />
-        </Button>
-        <h1 className="text-xl font-bold">Chat Rooms</h1>
-      </div>
-
-      {/* Search */}
-      <div className="p-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-          <Input
-            placeholder="Search conversations..."
-            className="pl-10"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+      <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white p-4">
+        <div className="flex justify-between items-center mb-2">
+          <div>
+            <h1 className="text-2xl font-bold">Chat Rooms</h1>
+            <p className="text-white text-opacity-90">Connect with patients and colleagues</p>
+          </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="patients" className="w-full">
-        <TabsList className="grid grid-cols-2 w-full px-4">
-          <TabsTrigger value="patients">Patients</TabsTrigger>
-          <TabsTrigger value="doctors">Doctors</TabsTrigger>
-        </TabsList>
-        
-        {/* Patients Tab */}
-        <TabsContent value="patients" className="px-4 mt-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredPatientChats.length > 0 ? (
-                filteredPatientChats.map((chat) => (
-                  <Card key={chat.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => navigate(`/doctor/chat/${chat.id}`)}>
-                    <CardContent className="p-3">
-                      <div className="flex items-center">
-                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-3">
-                          <span className="text-primary font-semibold">{chat.name.charAt(0)}</span>
-                        </div>
-                        <div className="flex-grow min-w-0">
-                          <div className="flex justify-between items-center">
-                            <h3 className="font-semibold truncate">{chat.name}</h3>
-                            <span className="text-xs text-gray-500">{chat.time}</span>
-                          </div>
-                          <p className="text-sm text-gray-600 truncate">{chat.lastMessage}</p>
-                        </div>
-                        {chat.unread > 0 && (
-                          <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center ml-2">
-                            <span className="text-white text-xs">{chat.unread}</span>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))
-              ) : (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">No conversations found</p>
-                </div>
-              )}
-            </div>
-          )}
-        </TabsContent>
-        
-        {/* Doctors Tab */}
-        <TabsContent value="doctors" className="px-4 mt-4">
+      <div className="container mx-auto px-4 py-4">
+        {/* Search and New Chat */}
+        <div className="flex gap-2 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white text-opacity-60 h-4 w-4" />
+            <Input
+              type="text"
+              placeholder="Search chats..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 bg-white bg-opacity-10 border-white border-opacity-20 text-white placeholder:text-white placeholder:text-opacity-60"
+            />
+          </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <div className="flex justify-end mb-4">
-              <DialogTrigger asChild>
-                <Button className="gap-1">
-                  <Plus className="h-4 w-4" /> New Chat
-                </Button>
-              </DialogTrigger>
-            </div>
-            
-            <DialogContent>
+            <DialogTrigger asChild>
+              <Button className="bg-teal-500 hover:bg-teal-600 text-white">
+                <Plus className="h-4 w-4 mr-2" />
+                New Chat
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-white bg-opacity-95 backdrop-blur-sm">
               <DialogHeader>
                 <DialogTitle>Create New Chat</DialogTitle>
-                <p className="text-sm text-muted-foreground">
-                  Select one or more doctors to start a conversation with.
-                </p>
               </DialogHeader>
-              
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Select Doctors</p>
@@ -436,46 +382,117 @@ export default function DoctorChatRooms() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {filteredDoctorChats.length > 0 ? (
-                filteredDoctorChats.map((chat) => (
-                  <Card key={chat.id} className="cursor-pointer hover:shadow-sm transition-shadow" onClick={() => navigate(`/doctor/chat/${chat.id}`)}>
-                    <CardContent className="p-3">
-                      <div className="flex items-center">
-                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center mr-3">
-                          <span className="text-primary font-semibold">{chat.name.charAt(0)}</span>
+        </div>
+
+        <Tabs defaultValue="patients" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 mb-4 bg-white bg-opacity-10 backdrop-blur-sm">
+            <TabsTrigger 
+              value="patients"
+              className="text-white data-[state=active]:bg-white data-[state=active]:text-teal-700"
+            >
+              <Users className="h-4 w-4 mr-2" />
+              Patients
+            </TabsTrigger>
+            <TabsTrigger 
+              value="doctors"
+              className="text-white data-[state=active]:bg-white data-[state=active]:text-teal-700"
+            >
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Doctors
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="patients">
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              </div>
+            ) : filteredPatientChats.length > 0 ? (
+              <div className="space-y-2">
+                {filteredPatientChats.map((chat) => (
+                  <Card 
+                    key={chat.id}
+                    className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 cursor-pointer hover:bg-white hover:bg-opacity-20 transition-colors"
+                    onClick={() => navigate(`/doctor/chat/${chat.id}`)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold text-white">{chat.name}</h3>
+                          {chat.lastMessage && (
+                            <p className="text-sm text-white text-opacity-80 line-clamp-1">
+                              {chat.lastMessage}
+                            </p>
+                          )}
                         </div>
-                        <div className="flex-grow min-w-0">
-                          <div className="flex justify-between items-center">
-                            <h3 className="font-semibold truncate">{chat.name}</h3>
-                            <span className="text-xs text-gray-500">{chat.time}</span>
-                          </div>
-                          <p className="text-sm text-gray-600 truncate">{chat.lastMessage}</p>
+                        <div className="text-right">
+                          {chat.time && (
+                            <p className="text-xs text-white text-opacity-60">{chat.time}</p>
+                          )}
+                          {chat.unread > 0 && (
+                            <span className="inline-block px-2 py-1 bg-teal-500 text-white text-xs rounded-full mt-1">
+                              {chat.unread}
+                            </span>
+                          )}
                         </div>
-                        {chat.unread > 0 && (
-                          <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center ml-2">
-                            <span className="text-white text-xs">{chat.unread}</span>
-                          </div>
-                        )}
                       </div>
                     </CardContent>
                   </Card>
-                ))
-              ) : (
-                <div className="text-center py-8 bg-gray-50 rounded-lg">
-                  <p className="text-gray-500">No conversations with other doctors</p>
-                </div>
-              )}
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg border border-white border-opacity-20">
+                <p className="text-white text-opacity-80">No patient chats found</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="doctors">
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              </div>
+            ) : filteredDoctorChats.length > 0 ? (
+              <div className="space-y-2">
+                {filteredDoctorChats.map((chat) => (
+                  <Card 
+                    key={chat.id}
+                    className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 cursor-pointer hover:bg-white hover:bg-opacity-20 transition-colors"
+                    onClick={() => navigate(`/doctor/chat/${chat.id}`)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="font-semibold text-white">{chat.name}</h3>
+                          {chat.lastMessage && (
+                            <p className="text-sm text-white text-opacity-80 line-clamp-1">
+                              {chat.lastMessage}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          {chat.time && (
+                            <p className="text-xs text-white text-opacity-60">{chat.time}</p>
+                          )}
+                          {chat.unread > 0 && (
+                            <span className="inline-block px-2 py-1 bg-teal-500 text-white text-xs rounded-full mt-1">
+                              {chat.unread}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg border border-white border-opacity-20">
+                <p className="text-white text-opacity-80">No doctor chats found</p>
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
 
       <BottomNavigation />
     </div>

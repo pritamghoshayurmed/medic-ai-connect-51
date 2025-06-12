@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -182,24 +182,24 @@ export default function DiagnosisEngine() {
   };
 
   return (
-    <div className="pb-24">
+    <div className="min-h-screen pb-24" style={{ background: 'linear-gradient(135deg, #005A7A, #002838)' }}>
       {/* Header */}
-      <div className="bg-primary text-white p-4 flex items-center justify-between">
+      <div className="bg-white/10 backdrop-blur-sm text-white p-4 flex items-center justify-between">
         <div className="flex items-center">
-          <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
+          <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 mr-2" onClick={() => navigate(-1)}>
             <ChevronLeft />
           </Button>
           <h1 className="text-xl font-bold">Diagnosis Engine</h1>
         </div>
         <div className="flex items-center">
           {advancedMode && (
-            <Badge variant="outline" className="mr-2 bg-yellow-800 text-white border-yellow-700">
+            <Badge variant="outline" className="mr-2 bg-yellow-500/20 text-yellow-100 border-yellow-400/50">
               Advanced Mode
             </Badge>
           )}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white mr-2">
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/20 mr-2">
                 <Users className="h-5 w-5" />
               </Button>
             </PopoverTrigger>
@@ -227,7 +227,7 @@ export default function DiagnosisEngine() {
           <Button 
             variant="ghost" 
             size="icon" 
-            className="text-white" 
+            className="text-white hover:bg-white/20" 
             onClick={() => setApiKeyDialogOpen(true)}
           >
             <Settings />
@@ -237,30 +237,30 @@ export default function DiagnosisEngine() {
 
       {/* Tabs */}
       <Tabs defaultValue="analyze" className="w-full">
-        <TabsList className="grid grid-cols-2 w-full">
-          <TabsTrigger value="analyze">Analyze</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+        <TabsList className="grid grid-cols-2 w-full bg-white/10 backdrop-blur-sm mx-4 mt-4 rounded-lg">
+          <TabsTrigger value="analyze" className="text-white data-[state=active]:bg-white data-[state=active]:text-gray-900">Analyze</TabsTrigger>
+          <TabsTrigger value="history" className="text-white data-[state=active]:bg-white data-[state=active]:text-gray-900">History</TabsTrigger>
         </TabsList>
         
         {/* Analyze Tab */}
         <TabsContent value="analyze" className="p-4">
           <div className="text-center mb-6">
-            <div className="w-20 h-20 bg-primary-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FileImage className="h-10 w-10 text-primary" />
+            <div className="w-20 h-20 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center mx-auto mb-4">
+              <FileImage className="h-10 w-10 text-white" />
             </div>
-            <h2 className="text-xl font-bold mb-2">Medical Image Analysis</h2>
-            <p className="text-gray-600 mb-4">
+            <h2 className="text-xl font-bold mb-2 text-white">Medical Image Analysis</h2>
+            <p className="text-white/80 mb-4">
               Our AI engine analyzes medical images and provides diagnostic insights
             </p>
             
             {!hasApiKey && (
-              <div className="mb-4 p-3 bg-amber-50 text-amber-800 rounded-md">
+              <div className="mb-4 p-3 bg-amber-500/20 backdrop-blur-sm text-amber-100 rounded-md border border-amber-400/30">
                 <p className="font-medium">API Key Required</p>
                 <p className="text-sm">Please add your Gemini API key in settings to use the diagnosis engine.</p>
                 <Button 
                   variant="outline" 
                   size="sm" 
-                  className="mt-2"
+                  className="mt-2 border-amber-400/50 text-amber-100 hover:bg-amber-400/20"
                   onClick={() => setApiKeyDialogOpen(true)}
                 >
                   Add API Key
@@ -268,11 +268,11 @@ export default function DiagnosisEngine() {
               </div>
             )}
             
-            <Card className="mb-6">
+            <Card className="mb-6 bg-white/10 backdrop-blur-sm border-white/20">
               <CardContent className="p-4">
                 <Accordion type="single" collapsible className="w-full">
-                  <AccordionItem value="options">
-                    <AccordionTrigger>
+                  <AccordionItem value="options" className="border-white/20">
+                    <AccordionTrigger className="text-white hover:no-underline">
                       <div className="flex items-center">
                         <Settings className="h-4 w-4 mr-2" />
                         <span>Analysis Options</span>
@@ -282,33 +282,35 @@ export default function DiagnosisEngine() {
                       <div className="space-y-4 py-2">
                         <div>
                           <div className="flex items-center justify-between">
-                            <label className="text-sm font-medium">Advanced Analysis Mode</label>
+                            <label className="text-sm font-medium text-white">Advanced Analysis Mode</label>
                             <Button 
                               variant={advancedMode ? "default" : "outline"} 
                               size="sm"
+                              className={advancedMode ? "" : "border-white/30 text-white hover:bg-white/20"}
                               onClick={() => setAdvancedMode(!advancedMode)}
                             >
                               {advancedMode ? "Enabled" : "Disabled"}
                             </Button>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-white/70 mt-1">
                             Enable detailed analysis with heatmap visualization and literature search
                           </p>
                         </div>
                         
                         {advancedMode && (
                           <div>
-                            <label className="text-sm font-medium block mb-2">Select Data Sources</label>
+                            <label className="text-sm font-medium block mb-2 text-white">Select Data Sources</label>
                             <div className="space-y-2">
                               {dataSources.map(source => (
                                 <div key={source.id} className="flex items-center justify-between">
-                                  <div className="flex items-center">
+                                  <div className="flex items-center text-white">
                                     {source.icon}
                                     <span className="text-sm">{source.name}</span>
                                   </div>
                                   <Button 
                                     variant={source.enabled ? "default" : "outline"} 
                                     size="sm"
+                                    className={source.enabled ? "" : "border-white/30 text-white hover:bg-white/20"}
                                     onClick={() => toggleDataSource(source.id)}
                                   >
                                     {source.enabled ? "Enabled" : "Disabled"}
@@ -316,7 +318,7 @@ export default function DiagnosisEngine() {
                                 </div>
                               ))}
                             </div>
-                            <p className="text-xs text-gray-500 mt-2">
+                            <p className="text-xs text-white/70 mt-2">
                               Select which medical databases to include in the analysis
                             </p>
                           </div>
@@ -336,7 +338,7 @@ export default function DiagnosisEngine() {
             
             {selectedFile && !analysisResults && (
               <Button 
-                className="w-full mt-4"
+                className="w-full mt-4 bg-white text-gray-900 hover:bg-white/90"
                 onClick={startAnalysis}
                 disabled={isAnalyzing || !hasApiKey}
               >
@@ -345,8 +347,8 @@ export default function DiagnosisEngine() {
             )}
             
             {isAnalyzing && (
-              <div className="mt-4 p-4 bg-muted rounded-md">
-                <p className="animate-pulse text-center">
+              <div className="mt-4 p-4 bg-white/10 backdrop-blur-sm rounded-md border border-white/20">
+                <p className="animate-pulse text-center text-white">
                   Analyzing your medical image...
                 </p>
               </div>
@@ -368,18 +370,20 @@ export default function DiagnosisEngine() {
           </div>
           
           <div className="mt-6">
-            <h3 className="font-semibold mb-3">Select Scan Type</h3>
+            <h3 className="font-semibold mb-3 text-white">Select Scan Type</h3>
             <div className="grid grid-cols-2 gap-4">
               {scanTypes.map((scan, index) => (
                 <Card 
                   key={index} 
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className="cursor-pointer hover:shadow-md transition-shadow bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20"
                   onClick={() => handleScanTypeSelect(scan.name)}
                 >
                   <CardContent className="p-4 flex flex-col items-center text-center">
-                    {scan.icon}
-                    <h4 className="font-medium mt-2">{scan.name}</h4>
-                    <p className="text-xs text-gray-500 mt-1">{scan.description}</p>
+                    <div className="text-white">
+                      {React.cloneElement(scan.icon, { className: "h-8 w-8 text-white" })}
+                    </div>
+                    <h4 className="font-medium mt-2 text-white">{scan.name}</h4>
+                    <p className="text-xs text-white/70 mt-1">{scan.description}</p>
                   </CardContent>
                 </Card>
               ))}
@@ -390,31 +394,32 @@ export default function DiagnosisEngine() {
         {/* History Tab */}
         <TabsContent value="history" className="p-4">
           <div className="mt-4 mb-2 flex justify-between items-center">
-            <h3 className="font-medium text-lg">Previous Analyses</h3>
+            <h3 className="font-medium text-lg text-white">Previous Analyses</h3>
             <Input
               type="text"
               placeholder="Search..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="max-w-[200px]"
+              className="max-w-[200px] bg-white/10 backdrop-blur-sm border-white/20 text-white placeholder:text-white/50"
             />
           </div>
           
           <div className="space-y-4">
             {analysisHistory.length > 0 ? (
               analysisHistory.map((item) => (
-                <Card key={item.id} className="cursor-pointer hover:shadow-md transition-shadow">
+                <Card key={item.id} className="cursor-pointer hover:shadow-md transition-shadow bg-white/10 backdrop-blur-sm border-white/20 hover:bg-white/20">
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start">
                       <div>
-                        <h4 className="font-medium">{item.filename}</h4>
-                        <p className="text-sm text-gray-500">
+                        <h4 className="font-medium text-white">{item.filename}</h4>
+                        <p className="text-sm text-white/70">
                           {new Date(item.date).toLocaleDateString()} at {new Date(item.date).toLocaleTimeString()}
                         </p>
                       </div>
                       <Button 
                         variant="outline" 
                         size="sm"
+                        className="border-white/30 text-white hover:bg-white/20"
                         onClick={() => {
                           setAnalysisResults({
                             findings: item.findings,
@@ -427,13 +432,13 @@ export default function DiagnosisEngine() {
                     </div>
                     
                     <div className="mt-2">
-                      <p className="text-sm font-medium">Key findings:</p>
-                      <ul className="mt-1 text-sm text-gray-600">
+                      <p className="text-sm font-medium text-white">Key findings:</p>
+                      <ul className="mt-1 text-sm text-white/80">
                         {item.findings.slice(0, 2).map((finding, idx) => (
                           <li key={idx} className="line-clamp-1">{finding}</li>
                         ))}
                         {item.findings.length > 2 && (
-                          <li className="text-xs text-gray-500">
+                          <li className="text-xs text-white/60">
                             +{item.findings.length - 2} more findings
                           </li>
                         )}
@@ -443,7 +448,7 @@ export default function DiagnosisEngine() {
                 </Card>
               ))
             ) : (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-white">
                 <FileText className="mx-auto h-12 w-12 opacity-20 mb-2" />
                 <p>No previous analyses found</p>
                 {searchQuery && (
@@ -451,7 +456,7 @@ export default function DiagnosisEngine() {
                 )}
                 <Button
                   variant="outline"
-                  className="mt-4"
+                  className="mt-4 border-white/30 text-white hover:bg-white/20"
                   onClick={() => window.location.href = "#analyze"}
                 >
                   Start a new analysis

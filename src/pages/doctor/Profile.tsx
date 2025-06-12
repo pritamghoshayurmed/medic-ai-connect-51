@@ -12,7 +12,8 @@ import {
   ChevronRight,
   Plus,
   Trash,
-  Edit
+  Edit,
+  X
 } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/contexts/AuthContext";
@@ -500,316 +501,244 @@ export default function DoctorProfile() {
   }
 
   return (
-    <div className="pb-24">
-      <div className="bg-primary text-white p-4 flex items-center">
-        <Button variant="ghost" size="icon" className="text-white mr-2" onClick={() => navigate(-1)}>
-          <ChevronLeft />
-        </Button>
-        <h1 className="text-xl font-bold">Profile</h1>
-      </div>
-
-      <div className="flex items-center p-6">
-        <div className="w-20 h-20 rounded-full bg-gray-200 flex items-center justify-center mr-4">
-          {user?.profilePic ? (
-            <img
-              src={user.profilePic}
-              alt={doctorProfile?.full_name}
-              className="w-full h-full rounded-full object-cover"
-            />
-          ) : (
-            <User className="h-10 w-10 text-gray-500" />
-          )}
-        </div>
-        <div>
-          <h2 className="text-xl font-bold">{doctorProfile?.full_name}</h2>
-          <p className="text-gray-600">{doctorProfile?.specialty?.name || 'Doctor'}</p>
-          <p className="text-gray-600">{doctorProfile?.doctor_profile?.experience_years || 0} years experience</p>
+    <div className="pb-24 min-h-screen" style={{background: 'linear-gradient(135deg, #005A7A, #002838)'}}>
+      {/* Header */}
+      <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white p-4">
+        <div className="flex justify-between items-center mb-2">
+          <div>
+            <h1 className="text-2xl font-bold">Profile</h1>
+            <p className="text-white text-opacity-90">Manage your account</p>
+          </div>
+          <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-lg">
+            <span className="text-teal-600 text-xl font-bold">{doctorProfile?.full_name?.charAt(0)}</span>
+          </div>
         </div>
       </div>
 
-      <Separator />
-
-      <Tabs defaultValue="availability" className="w-full p-4">
-        <TabsList className="grid grid-cols-3 w-full mb-4">
-          <TabsTrigger value="availability">Availability</TabsTrigger>
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="settings">Settings</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="availability">
+      <div className="container mx-auto px-4 py-4">
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
+        ) : (
           <div className="space-y-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold">Available for Bookings</h3>
-                <Switch
-                  checked={availableForBooking}
-                  onCheckedChange={setAvailableForBooking}
-                />
-              </div>
-              
-              <div className="space-y-4">
-                {availabilitySlots.map((day) => (
-                  <div key={day.day} className="border-b pb-3 last:border-0 last:pb-0">
-                    <div className="flex justify-between items-center">
-                      <h4 className="font-medium">{day.day}</h4>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => handleEditDay(day.day)}
-                      >
-                        Edit
-                      </Button>
+            {/* Personal Information */}
+            <Card className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Personal Information</h2>
+                    <p className="text-sm text-white text-opacity-80">Update your personal details</p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white bg-opacity-10 text-white hover:bg-white hover:bg-opacity-20"
+                    onClick={() => setPersonalInfoDialog(true)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+                <div className="space-y-2 text-white">
+                  <div>
+                    <p className="text-sm text-white text-opacity-70">Full Name</p>
+                    <p className="font-medium">{doctorProfile?.full_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-white text-opacity-70">Email</p>
+                    <p className="font-medium">{doctorProfile?.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-white text-opacity-70">Phone</p>
+                    <p className="font-medium">{doctorProfile?.phone || 'Not provided'}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Professional Information */}
+            <Card className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Professional Information</h2>
+                    <p className="text-sm text-white text-opacity-80">Your medical expertise and experience</p>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    className="bg-white bg-opacity-10 text-white hover:bg-white hover:bg-opacity-20"
+                    onClick={() => setProfessionalInfoDialog(true)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" />
+                    Edit
+                  </Button>
+                </div>
+                <div className="space-y-2 text-white">
+                  <div>
+                    <p className="text-sm text-white text-opacity-70">Specialty</p>
+                    <p className="font-medium">{doctorProfile?.specialty?.name || 'Not specified'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-white text-opacity-70">Experience</p>
+                    <p className="font-medium">{doctorProfile?.doctor_profile?.experience_years || 0} years</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-white text-opacity-70">Qualification</p>
+                    <p className="font-medium">{doctorProfile?.doctor_profile?.qualification || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-white text-opacity-70">Consultation Fee</p>
+                    <p className="font-medium">₹{doctorProfile?.doctor_profile?.consultation_fee || 0}</p>
+                  </div>
+                  {doctorProfile?.doctor_profile?.about && (
+                    <div>
+                      <p className="text-sm text-white text-opacity-70">About</p>
+                      <p className="font-medium">{doctorProfile.doctor_profile.about}</p>
                     </div>
-                    {day.slots.length > 0 ? (
-                      <div className="mt-2 space-y-1">
-                        {day.slots.map((slot, idx) => (
-                          <div key={idx} className="flex items-center">
-                            <Clock className="h-4 w-4 text-gray-500 mr-2" />
-                            <span className="text-sm">{slot}</span>
-                          </div>
-                        ))}
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Availability */}
+            <Card className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h2 className="text-lg font-semibold text-white">Availability</h2>
+                    <p className="text-sm text-white text-opacity-80">Set your consultation hours</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  {availabilitySlots.map((daySlot) => (
+                    <div key={daySlot.day} className="p-3 bg-white bg-opacity-5 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <h3 className="font-medium text-white">{daySlot.day}</h3>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          className="bg-white bg-opacity-10 text-white hover:bg-white hover:bg-opacity-20"
+                          onClick={() => handleEditDay(daySlot.day)}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
                       </div>
-                    ) : (
-                      <p className="text-sm text-gray-500 mt-2">Not available</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">Appointment Settings</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">Consultation Duration</p>
-                    <p className="text-sm text-gray-500">Time per appointment</p>
-                  </div>
-                  <select className="border rounded p-1">
-                    <option>30 minutes</option>
-                    <option>45 minutes</option>
-                    <option>60 minutes</option>
-                  </select>
+                      {daySlot.slots.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {daySlot.slots.map((slot) => (
+                            <span 
+                              key={slot} 
+                              className="px-3 py-1 bg-teal-500 text-white text-sm rounded-full"
+                            >
+                              {slot}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-white text-opacity-60">No slots added</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-                
-                <div className="flex justify-between items-center">
-                  <div>
-                    <p className="font-medium">Buffer Time</p>
-                    <p className="text-sm text-gray-500">Time between appointments</p>
+              </CardContent>
+            </Card>
+
+            {/* Settings */}
+            <Card className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20">
+              <CardContent className="p-4">
+                <h2 className="text-lg font-semibold text-white mb-4">Settings</h2>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-white">Notifications</p>
+                      <p className="text-sm text-white text-opacity-70">Receive appointment alerts</p>
+                    </div>
+                    <Switch 
+                      checked={notificationsEnabled}
+                      onCheckedChange={setNotificationsEnabled}
+                    />
                   </div>
-                  <select className="border rounded p-1">
-                    <option>5 minutes</option>
-                    <option>10 minutes</option>
-                    <option>15 minutes</option>
-                  </select>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-white">Available for Booking</p>
+                      <p className="text-sm text-white text-opacity-70">Allow patients to book appointments</p>
+                    </div>
+                    <Switch 
+                      checked={availableForBooking}
+                      onCheckedChange={setAvailableForBooking}
+                    />
+                  </div>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
+
+            {/* Logout */}
+            <Button 
+              variant="destructive" 
+              className="w-full bg-red-500 hover:bg-red-600"
+              onClick={handleLogout}
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </Button>
           </div>
-        </TabsContent>
-        
-        <TabsContent value="profile">
-          <div className="space-y-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">Professional Information</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Specialty</p>
-                  <p>{doctorProfile?.specialty?.name || 'Not set'}</p>
-                </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Experience</p>
-                  <p>{doctorProfile?.doctor_profile?.experience_years || 0} years</p>
-                </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Consultation Fee</p>
-                  <p>${doctorProfile?.doctor_profile?.consultation_fee || 0}</p>
-                </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Qualification</p>
-                  <p>{doctorProfile?.doctor_profile?.qualification || 'Not set'}</p>
-                </div>
-                <div className="mt-2">
-                  <p className="text-gray-600 mb-1">About</p>
-                  <p className="text-sm">
-                    {doctorProfile?.doctor_profile?.about || 'No information provided.'}
-                  </p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-2"
-                  onClick={() => setProfessionalInfoDialog(true)}
-                >
-                  Edit Professional Info
-                </Button>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">Personal Information</h3>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Full Name</p>
-                  <p>{doctorProfile?.full_name}</p>
-                </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Email</p>
-                  <p>{doctorProfile?.email}</p>
-                </div>
-                <div className="flex justify-between items-center">
-                  <p className="text-gray-600">Phone</p>
-                  <p>{doctorProfile?.phone || 'Not set'}</p>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full mt-2"
-                  onClick={() => setPersonalInfoDialog(true)}
-                >
-                  Edit Personal Info
-                </Button>
-              </div>
-            </div>
-          </div>
-        </TabsContent>
-        
-        <TabsContent value="settings">
-          <div className="space-y-4">
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">Notifications</h3>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="notifications">Enable Notifications</Label>
-                    <p className="text-sm text-gray-500">Receive alerts and updates</p>
-                  </div>
-                  <Switch
-                    id="notifications"
-                    checked={notificationsEnabled}
-                    onCheckedChange={setNotificationsEnabled}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="appointment-alerts">Appointment Alerts</Label>
-                    <p className="text-sm text-gray-500">Get notified about appointments</p>
-                  </div>
-                  <Switch
-                    id="appointment-alerts"
-                    checked={true}
-                    disabled={!notificationsEnabled}
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="patient-messages">Patient Messages</Label>
-                    <p className="text-sm text-gray-500">Notifications for patient messages</p>
-                  </div>
-                  <Switch
-                    id="patient-messages"
-                    checked={true}
-                    disabled={!notificationsEnabled}
-                  />
-                </div>
-              </div>
-            </div>
-            
-            <div className="bg-white rounded-lg p-4 shadow-sm">
-              <h3 className="font-semibold mb-3">Account</h3>
-              <Button
-                variant="destructive"
-                size="sm"
-                className="w-full flex justify-between items-center"
-              >
-                <span>Delete Account</span>
-                <Trash className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </TabsContent>
-      </Tabs>
-      
-      <div className="p-4">
-        <Button 
-          variant="destructive" 
-          className="w-full"
-          onClick={handleLogout}
-        >
-          <LogOut className="mr-2 h-4 w-4" /> Logout
-        </Button>
+        )}
       </div>
 
+      {/* Dialogs */}
       <Dialog open={personalInfoDialog} onOpenChange={setPersonalInfoDialog}>
-        <DialogContent>
+        <DialogContent className="bg-white">
           <DialogHeader>
             <DialogTitle>Edit Personal Information</DialogTitle>
-            <DialogDescription>
-              Update your personal details below
-            </DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="full-name">Full Name</Label>
+              <Label>Full Name</Label>
               <Input
-                id="full-name"
                 value={personalInfo.full_name}
-                onChange={(e) => setPersonalInfo({...personalInfo, full_name: e.target.value})}
+                onChange={(e) => setPersonalInfo({ ...personalInfo, full_name: e.target.value })}
               />
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
+              <Label>Email</Label>
               <Input
-                id="email"
+                type="email"
                 value={personalInfo.email}
-                disabled
+                onChange={(e) => setPersonalInfo({ ...personalInfo, email: e.target.value })}
               />
-              <p className="text-xs text-gray-500">Email cannot be changed</p>
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="phone">Phone Number</Label>
+              <Label>Phone</Label>
               <Input
-                id="phone"
                 value={personalInfo.phone}
-                onChange={(e) => setPersonalInfo({...personalInfo, phone: e.target.value})}
+                onChange={(e) => setPersonalInfo({ ...personalInfo, phone: e.target.value })}
               />
             </div>
           </div>
-          
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setPersonalInfoDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={updatePersonalInfo}>
-              Save Changes
-            </Button>
+            <Button variant="outline" onClick={() => setPersonalInfoDialog(false)}>Cancel</Button>
+            <Button onClick={updatePersonalInfo}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       <Dialog open={professionalInfoDialog} onOpenChange={setProfessionalInfoDialog}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="bg-white">
           <DialogHeader>
             <DialogTitle>Edit Professional Information</DialogTitle>
-            <DialogDescription>
-              Update your professional details
-            </DialogDescription>
           </DialogHeader>
-          
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label htmlFor="specialty">Specialty</Label>
-              <Select 
+              <Label>Specialty</Label>
+              <Select
                 value={professionalInfo.specialty_id}
-                onValueChange={(value) => setProfessionalInfo({...professionalInfo, specialty_id: value})}
+                onValueChange={(value) => setProfessionalInfo({ ...professionalInfo, specialty_id: value })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a specialty" />
+                  <SelectValue placeholder="Select specialty" />
                 </SelectTrigger>
                 <SelectContent>
                   {specialties.map((specialty) => (
@@ -820,119 +749,82 @@ export default function DoctorProfile() {
                 </SelectContent>
               </Select>
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="experience">Years of Experience</Label>
+              <Label>Years of Experience</Label>
               <Input
-                id="experience"
                 type="number"
-                min="0"
                 value={professionalInfo.experience_years}
-                onChange={(e) => setProfessionalInfo({
-                  ...professionalInfo, 
-                  experience_years: parseInt(e.target.value) || 0
-                })}
+                onChange={(e) => setProfessionalInfo({ ...professionalInfo, experience_years: parseInt(e.target.value) || 0 })}
               />
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="qualification">Qualification</Label>
+              <Label>Qualification</Label>
               <Input
-                id="qualification"
                 value={professionalInfo.qualification}
-                onChange={(e) => setProfessionalInfo({
-                  ...professionalInfo, 
-                  qualification: e.target.value
-                })}
+                onChange={(e) => setProfessionalInfo({ ...professionalInfo, qualification: e.target.value })}
               />
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="fee">Consultation Fee ($)</Label>
+              <Label>Consultation Fee (₹)</Label>
               <Input
-                id="fee"
                 type="number"
-                min="0"
-                step="5"
                 value={professionalInfo.consultation_fee}
-                onChange={(e) => setProfessionalInfo({
-                  ...professionalInfo, 
-                  consultation_fee: parseInt(e.target.value) || 0
-                })}
+                onChange={(e) => setProfessionalInfo({ ...professionalInfo, consultation_fee: parseInt(e.target.value) || 0 })}
               />
             </div>
-            
             <div className="space-y-2">
-              <Label htmlFor="about">About</Label>
+              <Label>About</Label>
               <Textarea
-                id="about"
-                rows={4}
                 value={professionalInfo.about}
-                onChange={(e) => setProfessionalInfo({
-                  ...professionalInfo, 
-                  about: e.target.value
-                })}
-                placeholder="Write a brief professional summary"
+                onChange={(e) => setProfessionalInfo({ ...professionalInfo, about: e.target.value })}
+                rows={4}
               />
             </div>
           </div>
-          
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setProfessionalInfoDialog(false)}>
-              Cancel
-            </Button>
-            <Button onClick={updateProfessionalInfo}>
-              Save Changes
-            </Button>
+            <Button variant="outline" onClick={() => setProfessionalInfoDialog(false)}>Cancel</Button>
+            <Button onClick={updateProfessionalInfo}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      
-      <Dialog open={editAvailabilityDay !== null} onOpenChange={(open) => !open && setEditAvailabilityDay(null)}>
-        <DialogContent>
+
+      <Dialog open={availabilityDialog} onOpenChange={setAvailabilityDialog}>
+        <DialogContent className="bg-white">
           <DialogHeader>
-            <DialogTitle>Edit {editAvailabilityDay} Availability</DialogTitle>
-            <DialogDescription>
-              Add or remove time slots for {editAvailabilityDay}
-            </DialogDescription>
+            <DialogTitle>Edit Availability - {editAvailabilityDay}</DialogTitle>
           </DialogHeader>
-          
           <div className="space-y-4 py-4">
-            <div className="flex space-x-2">
-              <Input
-                placeholder="e.g. 9:00 AM - 1:00 PM"
-                value={newSlot}
-                onChange={(e) => setNewSlot(e.target.value)}
-              />
-              <Button onClick={addTimeSlot}>Add</Button>
+            <div className="space-y-2">
+              <Label>Add Time Slot</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="time"
+                  value={newSlot}
+                  onChange={(e) => setNewSlot(e.target.value)}
+                />
+                <Button onClick={addTimeSlot}>Add</Button>
+              </div>
             </div>
-            
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {daySlots.length > 0 ? (
-                daySlots.map((slot, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                    <div className="flex items-center">
-                      <Clock className="h-4 w-4 mr-2 text-gray-600" />
-                      <span>{slot}</span>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => removeTimeSlot(slot)}>
-                      <Trash className="h-4 w-4 text-red-500" />
-                    </Button>
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-gray-500 py-2">No time slots added yet</p>
-              )}
+            <div className="flex flex-wrap gap-2">
+              {daySlots.map((slot) => (
+                <div
+                  key={slot}
+                  className="flex items-center gap-1 px-3 py-1 bg-gray-100 rounded-full"
+                >
+                  <span>{slot}</span>
+                  <button
+                    onClick={() => removeTimeSlot(slot)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
             </div>
           </div>
-          
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setEditAvailabilityDay(null)}>
-              Cancel
-            </Button>
-            <Button onClick={saveAvailabilityDay}>
-              Save Changes
-            </Button>
+            <Button variant="outline" onClick={() => setAvailabilityDialog(false)}>Cancel</Button>
+            <Button onClick={saveAvailabilityDay}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -273,36 +273,36 @@ export default function DoctorDashboard() {
   };
 
   return (
-    <div className="pb-24">
+    <div className="pb-24 min-h-screen" style={{background: 'linear-gradient(135deg, #005A7A, #002838)'}}>
       {/* Header */}
-      <div className="bg-primary text-white p-4">
+      <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white p-4">
         <div className="flex justify-between items-center mb-2">
           <div>
             <h1 className="text-2xl font-bold">Hello, {user?.name?.split(" ")[1] || "Doctor"}</h1>
-            <p className="text-white text-opacity-80">Welcome back</p>
+            <p className="text-white text-opacity-90">Welcome back</p>
           </div>
-          <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center">
-            <span className="text-primary text-xl font-bold">{user?.name?.charAt(0)}</span>
+          <div className="w-12 h-12 rounded-full bg-white flex items-center justify-center shadow-lg">
+            <span className="text-teal-600 text-xl font-bold">{user?.name?.charAt(0)}</span>
           </div>
         </div>
         
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="bg-white bg-opacity-10 rounded-lg p-3">
-            <p className="text-white text-opacity-80 text-sm">Today's Patients</p>
+          <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-lg p-3 border border-white border-opacity-20">
+            <p className="text-white text-opacity-90 text-sm">Today's Patients</p>
             <p className="text-xl font-bold">{todayAppointments.length}</p>
           </div>
-          <div className="bg-white bg-opacity-10 rounded-lg p-3">
-            <p className="text-white text-opacity-80 text-sm">Total Patients</p>
+          <div className="bg-white bg-opacity-15 backdrop-blur-sm rounded-lg p-3 border border-white border-opacity-20">
+            <p className="text-white text-opacity-90 text-sm">Total Patients</p>
             <p className="text-xl font-bold">{totalPatients}</p>
           </div>
         </div>
       </div>
 
       {/* Quick actions */}
-      <div className="px-4 py-4 grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 gap-4 p-4">
         <Button
           variant="outline"
-          className="flex flex-col items-center justify-center h-20 p-2 space-y-1"
+          className="flex flex-col items-center justify-center h-20 p-2 space-y-1 bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 text-white hover:bg-white hover:bg-opacity-20 hover:text-white"
           onClick={() => navigate("/doctor/appointments")}
         >
           <Calendar className="h-6 w-6" />
@@ -310,7 +310,7 @@ export default function DoctorDashboard() {
         </Button>
         <Button
           variant="outline"
-          className="flex flex-col items-center justify-center h-20 p-2 space-y-1"
+          className="flex flex-col items-center justify-center h-20 p-2 space-y-1 bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 text-white hover:bg-white hover:bg-opacity-20 hover:text-white"
           onClick={() => navigate("/doctor/chat-rooms")}
         >
           <Users className="h-6 w-6" />
@@ -318,16 +318,16 @@ export default function DoctorDashboard() {
         </Button>
         <Button
           variant="outline"
-          className="flex flex-col items-center justify-center h-20 p-2 space-y-1"
+          className="flex flex-col items-center justify-center h-20 p-2 space-y-1 bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 text-white hover:bg-white hover:bg-opacity-20 hover:text-white"
           onClick={() => navigate("/doctor/analytics")}
         >
           <Activity className="h-6 w-6" />
-          <span className="text-xs">Analytics</span>
+          <span className="text-xs">Analysis</span>
         </Button>
         <Button
           variant="outline"
-          className="flex flex-col items-center justify-center h-20 p-2 space-y-1"
-          onClick={() => navigate("/doctor/diagnosis")}
+          className="flex flex-col items-center justify-center h-20 p-2 space-y-1 bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 text-white hover:bg-white hover:bg-opacity-20 hover:text-white"
+          onClick={() => navigate("/doctor/diagnosis-engine")}
         >
           <FileSearch className="h-6 w-6" />
           <span className="text-xs">Diagnosis</span>
@@ -336,23 +336,30 @@ export default function DoctorDashboard() {
 
       {/* Weekly Stats */}
       <div className="px-4 py-2">
-        <Card>
+        <Card className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20">
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Weekly Stats</CardTitle>
+            <CardTitle className="text-lg text-white">Weekly Stats</CardTitle>
           </CardHeader>
           <CardContent>
             {loading ? (
               <div className="flex items-center justify-center h-48">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={weeklyStats}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="day" />
-                  <YAxis />
-                  <Tooltip />
-                  <Bar dataKey="patients" fill="#2563EB" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.2)" />
+                  <XAxis dataKey="day" tick={{ fill: 'white' }} />
+                  <YAxis tick={{ fill: 'white' }} />
+                  <Tooltip 
+                    contentStyle={{ 
+                      backgroundColor: 'rgba(255,255,255,0.9)', 
+                      border: 'none', 
+                      borderRadius: '8px',
+                      color: '#0f766e'
+                    }} 
+                  />
+                  <Bar dataKey="patients" fill="#10b981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -363,39 +370,41 @@ export default function DoctorDashboard() {
       {/* Appointments */}
       <div className="px-4 py-2">
         <Tabs defaultValue="today" className="w-full">
-          <TabsList className="grid grid-cols-2 w-full mb-2">
-            <TabsTrigger value="today">Today</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+          <TabsList className="grid grid-cols-2 w-full mb-2 bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20">
+            <TabsTrigger value="today" className="text-white data-[state=active]:bg-white data-[state=active]:text-teal-700">Today</TabsTrigger>
+            <TabsTrigger value="upcoming" className="text-white data-[state=active]:bg-white data-[state=active]:text-teal-700">Upcoming</TabsTrigger>
           </TabsList>
           
           {/* Today's Appointments */}
           <TabsContent value="today">
-            <h3 className="font-bold mb-3">Today's Appointments</h3>
+            <h3 className="font-bold mb-3 text-white">Today's Appointments</h3>
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
               </div>
             ) : todayAppointments.length > 0 ? (
               todayAppointments.map((appointment) => (
                 <div key={appointment.id} className="mb-4">
-                  <AppointmentCard
-                    key={appointment.id}
-                    appointment={appointment}
-                    person={appointment.patient}
-                    onChat={() => navigate(`/doctor/chat/${appointment.patientId}`)}
-                  />
+                  <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-lg border border-white border-opacity-20">
+                    <AppointmentCard
+                      key={appointment.id}
+                      appointment={appointment}
+                      person={appointment.patient}
+                      onChat={() => navigate(`/doctor/chat/${appointment.patientId}`)}
+                    />
+                  </div>
                   {appointment.status === "pending" && (
                     <div className="flex gap-2 mt-2">
                       <Button 
                         variant="outline" 
-                        className="flex-1"
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white border-green-500"
                         onClick={() => handleAppointmentAction(appointment.id, 'confirm')}
                       >
                         Accept
                       </Button>
                       <Button 
                         variant="destructive" 
-                        className="flex-1"
+                        className="flex-1 bg-red-500 hover:bg-red-600"
                         onClick={() => handleAppointmentAction(appointment.id, 'cancel')}
                       >
                         Decline
@@ -405,7 +414,7 @@ export default function DoctorDashboard() {
                   {appointment.status === "confirmed" && (
                     <Button 
                       variant="outline" 
-                      className="w-full mt-2"
+                      className="w-full mt-2 bg-blue-500 hover:bg-blue-600 text-white border-blue-500"
                       onClick={() => handleAppointmentAction(appointment.id, 'complete')}
                     >
                       Mark as Completed
@@ -414,40 +423,42 @@ export default function DoctorDashboard() {
                 </div>
               ))
             ) : (
-              <div className="text-center py-6 bg-gray-50 rounded-lg">
-                <p className="text-gray-500">No appointments for today</p>
+              <div className="text-center py-6 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg border border-white border-opacity-20">
+                <p className="text-white text-opacity-80">No appointments for today</p>
               </div>
             )}
           </TabsContent>
           
           {/* Upcoming Appointments */}
           <TabsContent value="upcoming">
-            <h3 className="font-bold mb-3">Upcoming Appointments</h3>
+            <h3 className="font-bold mb-3 text-white">Upcoming Appointments</h3>
             {loading ? (
               <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
               </div>
             ) : upcomingAppointments.length > 0 ? (
               upcomingAppointments.map((appointment) => (
                 <div key={appointment.id} className="mb-4">
-                  <AppointmentCard
-                    key={appointment.id}
-                    appointment={appointment}
-                    person={appointment.patient}
-                    onChat={() => navigate(`/doctor/chat/${appointment.patientId}`)}
-                  />
+                  <div className="bg-white bg-opacity-10 backdrop-blur-sm rounded-lg border border-white border-opacity-20">
+                    <AppointmentCard
+                      key={appointment.id}
+                      appointment={appointment}
+                      person={appointment.patient}
+                      onChat={() => navigate(`/doctor/chat/${appointment.patientId}`)}
+                    />
+                  </div>
                   {appointment.status === "pending" && (
                     <div className="flex gap-2 mt-2">
                       <Button 
                         variant="outline" 
-                        className="flex-1"
+                        className="flex-1 bg-green-500 hover:bg-green-600 text-white border-green-500"
                         onClick={() => handleAppointmentAction(appointment.id, 'confirm')}
                       >
                         Accept
                       </Button>
                       <Button 
                         variant="destructive" 
-                        className="flex-1"
+                        className="flex-1 bg-red-500 hover:bg-red-600"
                         onClick={() => handleAppointmentAction(appointment.id, 'cancel')}
                       >
                         Decline
@@ -457,8 +468,8 @@ export default function DoctorDashboard() {
                 </div>
               ))
             ) : (
-              <div className="text-center py-6 bg-gray-50 rounded-lg">
-                <p className="text-gray-500">No upcoming appointments</p>
+              <div className="text-center py-6 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg border border-white border-opacity-20">
+                <p className="text-white text-opacity-80">No upcoming appointments</p>
               </div>
             )}
           </TabsContent>

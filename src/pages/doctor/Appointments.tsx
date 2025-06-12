@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { format } from "date-fns";
 import { Calendar, Clock, Pencil, X, MessageSquare } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import BottomNavigation from "@/components/BottomNavigation";
 
 export default function DoctorAppointments() {
   const { user } = useAuth();
@@ -122,114 +122,150 @@ export default function DoctorAppointments() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-6">My Appointments</h1>
-      
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-3 w-full">
-          <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
-          <TabsTrigger value="past">Past</TabsTrigger>
-          <TabsTrigger value="all">All</TabsTrigger>
-        </TabsList>
-        
-        <div className="mt-6">
-          {loading ? (
-            <div className="text-center py-10">Loading appointments...</div>
-          ) : appointments.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-gray-500">No appointments found.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {getFilteredAppointments().map((appointment) => (
-                <Card key={appointment.id} className="overflow-hidden">
-                  <CardContent className="p-0">
-                    <div className="flex flex-col md:flex-row">
-                      <div className="p-4 md:p-6 flex-1">
-                        <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
-                          <h3 className="font-semibold text-lg">{appointment.patient.name}</h3>
-                          <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}>
-                            {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
-                          </span>
-                        </div>
-                        
-                        <div className="space-y-2 text-sm text-gray-600">
-                          <div className="flex items-center">
-                            <Calendar className="h-4 w-4 mr-2" />
-                            <span>{format(new Date(appointment.date), 'MMMM d, yyyy')}</span>
-                          </div>
-                          <div className="flex items-center">
-                            <Clock className="h-4 w-4 mr-2" />
-                            <span>{appointment.time}</span>
-                          </div>
-                          {appointment.reason && (
-                            <div className="mt-2">
-                              <p className="font-medium text-gray-700">Reason:</p>
-                              <p className="mt-1">{appointment.reason}</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="bg-gray-50 p-4 md:p-6 md:w-64 flex flex-col justify-between">
-                        <div className="mb-4">
-                          <p className="text-sm font-medium text-gray-500">Patient Info</p>
-                          <p className="text-sm text-gray-600">{appointment.patient.email}</p>
-                          <p className="text-sm text-gray-600">{appointment.patient.phone}</p>
-                        </div>
-                        
-                        <div className="flex flex-wrap gap-2">
-                          {appointment.status === 'confirmed' && (
-                            <Button 
-                              className="w-full" 
-                              variant="default"
-                              onClick={() => navigate(`/doctor/chat/${appointment.patientId}`)}
-                            >
-                              <MessageSquare className="h-4 w-4 mr-2" />
-                              Message
-                            </Button>
-                          )}
-                          {appointment.status === 'pending' && (
-                            <div className="w-full flex gap-2">
-                              <Button className="flex-1" onClick={() => updateStatus(appointment.id, 'confirmed')}>
-                                Accept
-                              </Button>
-                              <Button variant="destructive" onClick={() => updateStatus(appointment.id, 'cancelled')}>
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          )}
-                          {appointment.status === 'completed' && (
-                            <Button className="w-full" variant="secondary">
-                              <Pencil className="h-4 w-4 mr-2" />
-                              Edit Notes
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+    <div className="pb-24 min-h-screen" style={{background: 'linear-gradient(135deg, #005A7A, #002838)'}}>
+      {/* Header */}
+      <div className="bg-gradient-to-r from-teal-600 to-cyan-600 text-white p-4">
+        <div className="flex justify-between items-center mb-2">
+          <div>
+            <h1 className="text-2xl font-bold">Appointments</h1>
+            <p className="text-white text-opacity-90">Manage your schedule</p>
+          </div>
         </div>
-      </Tabs>
+      </div>
+
+      <div className="container mx-auto px-4 py-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid grid-cols-3 w-full mb-4 bg-white bg-opacity-10 backdrop-blur-sm">
+            <TabsTrigger 
+              value="upcoming" 
+              className="text-white data-[state=active]:bg-white data-[state=active]:text-teal-700"
+            >
+              Upcoming
+            </TabsTrigger>
+            <TabsTrigger 
+              value="past"
+              className="text-white data-[state=active]:bg-white data-[state=active]:text-teal-700"
+            >
+              Past
+            </TabsTrigger>
+            <TabsTrigger 
+              value="all"
+              className="text-white data-[state=active]:bg-white data-[state=active]:text-teal-700"
+            >
+              All
+            </TabsTrigger>
+          </TabsList>
+          
+          <div className="mt-4">
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+              </div>
+            ) : appointments.length === 0 ? (
+              <div className="text-center py-6 bg-white bg-opacity-10 backdrop-blur-sm rounded-lg border border-white border-opacity-20">
+                <p className="text-white text-opacity-80">No appointments found.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {getFilteredAppointments().map((appointment) => (
+                  <Card key={appointment.id} className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20">
+                    <CardContent className="p-4">
+                      <div className="flex flex-col md:flex-row gap-4">
+                        <div className="flex-1">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between mb-4">
+                            <h3 className="font-semibold text-lg text-white">{appointment.patient.name}</h3>
+                            <span className={`inline-block px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(appointment.status)}`}>
+                              {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
+                            </span>
+                          </div>
+                          
+                          <div className="space-y-2 text-white text-opacity-90">
+                            <div className="flex items-center">
+                              <Calendar className="h-4 w-4 mr-2" />
+                              <span>{format(new Date(appointment.date), 'MMMM d, yyyy')}</span>
+                            </div>
+                            <div className="flex items-center">
+                              <Clock className="h-4 w-4 mr-2" />
+                              <span>{appointment.time}</span>
+                            </div>
+                            {appointment.reason && (
+                              <div className="mt-2">
+                                <p className="font-medium">Reason:</p>
+                                <p className="mt-1 text-white text-opacity-80">{appointment.reason}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div className="bg-white bg-opacity-5 backdrop-blur-sm p-4 rounded-lg md:w-64">
+                          <div className="mb-4">
+                            <p className="text-sm font-medium text-white text-opacity-90">Patient Info</p>
+                            <p className="text-sm text-white text-opacity-80">{appointment.patient.email}</p>
+                            <p className="text-sm text-white text-opacity-80">{appointment.patient.phone}</p>
+                          </div>
+                          
+                          <div className="flex flex-wrap gap-2">
+                            {appointment.status === 'confirmed' && (
+                              <Button 
+                                className="w-full bg-teal-500 hover:bg-teal-600 text-white" 
+                                onClick={() => navigate(`/doctor/chat/${appointment.patientId}`)}
+                              >
+                                <MessageSquare className="h-4 w-4 mr-2" />
+                                Message
+                              </Button>
+                            )}
+                            {appointment.status === 'pending' && (
+                              <div className="w-full flex gap-2">
+                                <Button 
+                                  className="flex-1 bg-green-500 hover:bg-green-600 text-white"
+                                  onClick={() => updateStatus(appointment.id, 'confirmed')}
+                                >
+                                  Accept
+                                </Button>
+                                <Button 
+                                  className="flex-1 bg-red-500 hover:bg-red-600 text-white"
+                                  onClick={() => updateStatus(appointment.id, 'cancelled')}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            )}
+                            {appointment.status === 'completed' && (
+                              <Button 
+                                className="w-full bg-blue-500 hover:bg-blue-600 text-white"
+                              >
+                                <Pencil className="h-4 w-4 mr-2" />
+                                Edit Notes
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </Tabs>
+      </div>
+      
+      <BottomNavigation />
     </div>
   );
   
   function getStatusColor(status: string) {
     switch (status) {
       case 'pending':
-        return 'bg-amber-100 text-amber-800';
+        return 'bg-amber-500 text-white';
       case 'confirmed':
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-500 text-white';
       case 'cancelled':
-        return 'bg-red-100 text-red-800';
+        return 'bg-red-500 text-white';
       case 'completed':
-        return 'bg-blue-100 text-blue-800';
-    default:
-      return 'bg-gray-100 text-gray-800';
+        return 'bg-blue-500 text-white';
+      default:
+        return 'bg-gray-500 text-white';
     }
   }
 }
