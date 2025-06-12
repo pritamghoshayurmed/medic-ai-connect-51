@@ -1,29 +1,291 @@
-# Logs
-logs
+# =============================================================================
+# KABIRAJ AI - GITIGNORE CONFIGURATION
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# DEPENDENCIES
+# -----------------------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# -----------------------------------------------------------------------------
+# BUILD OUTPUTS
+# -----------------------------------------------------------------------------
+dist/
+dist-ssr/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+.vite/
+
+# -----------------------------------------------------------------------------
+# ENVIRONMENT & CONFIGURATION FILES
+# -----------------------------------------------------------------------------
+# Environment variables (NEVER commit these)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env.staging
+
+# Keep the example file
+!.env.example
+
+# Configuration files with sensitive data
+config.json
+secrets.json
+firebase-adminsdk-*.json
+service-account-*.json
+
+# -----------------------------------------------------------------------------
+# LOGS & DEBUGGING
+# -----------------------------------------------------------------------------
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.pnpm-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+.nyc_output/
+
+# -----------------------------------------------------------------------------
+# TEMPORARY FILES
+# -----------------------------------------------------------------------------
+*.tmp
+*.temp
+.tmp/
+.temp/
 *.local
 
-# Environment files
-.env
-.env.*
-!.env.example
-
-# Editor directories and files
+# -----------------------------------------------------------------------------
+# EDITOR & IDE FILES
+# -----------------------------------------------------------------------------
+# VSCode
 .vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
 !.vscode/extensions.json
-.idea
+!.vscode/*.code-snippets
+
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# -----------------------------------------------------------------------------
+# OPERATING SYSTEM FILES
+# -----------------------------------------------------------------------------
+# macOS
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# -----------------------------------------------------------------------------
+# SECURITY & SENSITIVE FILES
+# -----------------------------------------------------------------------------
+# API Keys and secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# -----------------------------------------------------------------------------
+# DEVELOPMENT & TESTING
+# -----------------------------------------------------------------------------
+# Test coverage
+coverage/
+.coverage
+.pytest_cache/
+.tox/
+.nox/
+
+# Jest
+jest.config.js.bak
+
+# Cypress
+cypress/videos/
+cypress/screenshots/
+cypress/downloads/
+
+# -----------------------------------------------------------------------------
+# DEPLOYMENT & CLOUD
+# -----------------------------------------------------------------------------
+# Vercel
+.vercel/
+
+# Netlify
+.netlify/
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# AWS
+.aws/
+
+# Docker
+.dockerignore
+
+# -----------------------------------------------------------------------------
+# PACKAGE MANAGERS
+# -----------------------------------------------------------------------------
+# Yarn
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.pnp.*
+
+# NPM
+package-lock.json.bak
+.npm/
+
+# -----------------------------------------------------------------------------
+# MISCELLANEOUS
+# -----------------------------------------------------------------------------
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional stylelint cache
+.stylelintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache
+
+# Storybook build outputs
+.out
+.storybook-out
+storybook-static
+
+# Temporary folders
+tmp/
+temp/
+
+# =============================================================================
+# PROJECT SPECIFIC IGNORES
+# =============================================================================
+# Medical image uploads (for development)
+uploads/
+medical-images/
+test-images/
+
+# Generated reports
+reports/
+exports/
+
+# User data (development only)
+user-data/
+patient-data/
+
+# AI model cache
+model-cache/
+ai-cache/

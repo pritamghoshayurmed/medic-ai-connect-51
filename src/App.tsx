@@ -29,7 +29,10 @@ import PatientAppointments from "./pages/patient/Appointments";
 import PatientProfile from "./pages/patient/Profile";
 import DoctorProfile from "./pages/patient/DoctorProfile";
 import MedicationReminders from "./pages/patient/MedicationReminders";
-import PatientAIChat from "./pages/patient/PatientAIChat";
+import PatientAIChatFirebase from "./pages/patient/PatientAIChatFirebase";
+import FirebaseTestComponent from "./components/FirebaseTestComponent";
+const PatientAIChat = PatientAIChatFirebase; // Use Firebase version
+import AiAssistant from "./pages/patient/AiAssistant";
 import DoctorPatientChat from "./pages/patient/DoctorPatientChat";
 import PatientChat from "./pages/patient/Chat";
 import BookAppointment from "./pages/patient/BookAppointment";
@@ -41,6 +44,15 @@ import ChatRooms from "./pages/doctor/ChatRooms";
 import DoctorChat from "./pages/doctor/DoctorChat";
 import DoctorProfilePage from "./pages/doctor/Profile";
 import DoctorAnalytics from "./pages/doctor/Analytics";
+
+// Admin Pages
+import DatabaseSetup from "./pages/admin/DatabaseSetup";
+
+// Shared Pages
+import SharedReport from "./pages/SharedReport";
+
+// Import test utilities for debugging
+import "./utils/testAuth";
 
 const GlobalStyle = createGlobalStyle`
   * {
@@ -92,6 +104,7 @@ function AppContent() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/firebase-test" element={<FirebaseTestComponent />} />
 
         {/* Patient routes */}
         <Route
@@ -159,7 +172,23 @@ function AppContent() {
           }
         />
         <Route
+          path="/patient/ai-assistant"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <AiAssistant />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/patient/ai-chat"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <PatientAIChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/ai-chat/:conversationId"
           element={
             <ProtectedRoute allowedRoles={['patient']}>
               <PatientAIChat />
@@ -241,6 +270,14 @@ function AppContent() {
           }
         />
         <Route
+          path="/doctor/chat/:id"
+          element={
+            <ProtectedRoute allowedRoles={['doctor']}>
+              <DoctorChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
           path="/doctor/profile"
           element={
             <ProtectedRoute allowedRoles={['doctor']}>
@@ -248,6 +285,12 @@ function AppContent() {
             </ProtectedRoute>
           }
         />
+
+        {/* Admin routes */}
+        <Route path="/admin/database-setup" element={<DatabaseSetup />} />
+
+        {/* Shared routes (no authentication required) */}
+        <Route path="/shared-report/:reportId" element={<SharedReport />} />
 
         {/* Catch-all route */}
         <Route path="*" element={<NotFound />} />

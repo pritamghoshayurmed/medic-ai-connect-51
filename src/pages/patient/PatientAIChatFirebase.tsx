@@ -1,18 +1,17 @@
 import React, { useState, useRef, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import { firebaseAIChatService, AIChatMessage, AIChatSession } from "@/services/firebaseAIChatService";
 import {
-  Bot, Send, Mic, Heart, MessageSquare, Menu, PlusCircle, Share, Stethoscope,
-  ChevronLeft, Home, Activity, Search, Calendar, User
+  Bot, Send, Mic, Heart, MessageSquare, Menu, PlusCircle, Share, Stethoscope
 } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import BottomNavigation from "@/components/BottomNavigation";
 import { format } from 'date-fns';
 
-export default function PatientAIChat() {
+export default function PatientAIChatFirebase() {
   // Component state variables
   const navigate = useNavigate();
   const location = useLocation();
@@ -36,20 +35,10 @@ export default function PatientAIChat() {
   // Initialize Firebase AI chat session
   useEffect(() => {
     if (user && messages.length === 0) {
-      try {
-        const sessionId = firebaseAIChatService.initializeSession(user.id);
-        setCurrentSessionId(sessionId);
-        setMessages(firebaseAIChatService.getCurrentMessages());
-      } catch (error) {
-        console.error('Error initializing AI chat session:', error);
-        // Fallback initialization
-        setMessages([{
-          id: 'welcome',
-          role: 'assistant',
-          content: "Hello! I'm Kabiraj, your medical assistant. What symptom is troubling you the most?",
-          timestamp: new Date().toISOString()
-        }]);
-      }
+      const sessionId = firebaseAIChatService.initializeSession(user.id);
+      setCurrentSessionId(sessionId);
+      setMessages(firebaseAIChatService.getCurrentMessages());
+      console.log('AI chat session initialized for user:', user.id);
     }
   }, [user]);
 
@@ -69,47 +58,26 @@ export default function PatientAIChat() {
 
     setInput("");
     setIsLoading(true);
-    setErrorMessage("");
 
     try {
       // Initialize session if needed
       if (!currentSessionId) {
         const sessionId = firebaseAIChatService.initializeSession(user.id);
         setCurrentSessionId(sessionId);
+        setMessages(firebaseAIChatService.getCurrentMessages());
       }
 
-      // Add user message immediately to UI
-      const userMessage: AIChatMessage = {
-        id: `user-${Date.now()}`,
-        role: 'user',
-        content: message,
-        timestamp: new Date().toISOString()
-      };
-
-      setMessages(prev => [...prev, userMessage]);
-
       // Send message to Firebase AI service
-      const aiResponse = await firebaseAIChatService.sendMessage(user.id, message);
-
-      // Update messages with AI response
+      await firebaseAIChatService.sendMessage(user.id, message);
+      
+      // Update local messages
       setMessages(firebaseAIChatService.getCurrentMessages());
 
       console.log("AI response received successfully");
 
     } catch (error: any) {
-      console.error("Error sending message:", error);
-      setErrorMessage(`AI Error: ${error.message || 'Failed to get AI response'}`);
-
-      // Add error message to chat
-      const errorMsg: AIChatMessage = {
-        id: `error-${Date.now()}`,
-        role: 'assistant',
-        content: "Sorry, I encountered an error. Please try again later.",
-        timestamp: new Date().toISOString()
-      };
-
-      setMessages(prev => [...prev, errorMsg]);
-
+      console.error("Error:", error);
+      setErrorMessage(`AI Error: ${error.message}`);
       setTimeout(() => setErrorMessage(""), 5000);
 
     } finally {
@@ -120,9 +88,9 @@ export default function PatientAIChat() {
   // Load chat history
   const loadChatHistory = async () => {
     if (!user) return;
-
+    
     setLoadingHistory(true);
-
+    
     try {
       const history = await firebaseAIChatService.getChatHistory(user.id);
       setChatHistory(history);
@@ -141,10 +109,10 @@ export default function PatientAIChat() {
   // Load a specific chat session
   const loadChatSession = async (session: AIChatSession) => {
     try {
-      const sessionMessages = await firebaseAIChatService.loadSession(user!.id, session.id);
-      setMessages(sessionMessages);
+      const messages = await firebaseAIChatService.loadSession(user!.id, session.id);
+      setMessages(messages);
       setCurrentSessionId(session.id);
-
+      
       toast({
         title: "Chat Loaded",
         description: `Loaded chat: ${session.summary}`,
@@ -162,28 +130,15 @@ export default function PatientAIChat() {
   // Start new chat
   const startNewChat = () => {
     if (!user) return;
-
-    try {
-      firebaseAIChatService.clearCurrentSession();
-      const sessionId = firebaseAIChatService.initializeSession(user.id);
-      setCurrentSessionId(sessionId);
-      setMessages(firebaseAIChatService.getCurrentMessages());
-
-      toast({
-        title: "New Chat Started",
-        description: "Started a new conversation with Kabiraj AI",
-      });
-    } catch (error) {
-      console.error('Error starting new chat:', error);
-      // Fallback
-      setMessages([{
-        id: 'welcome-new',
-        role: 'assistant',
-        content: "Hello! I'm Kabiraj, your medical assistant. What symptom is troubling you the most?",
-        timestamp: new Date().toISOString()
-      }]);
-      setCurrentSessionId(`session-${Date.now()}`);
-    }
+    
+    const sessionId = firebaseAIChatService.initializeSession(user.id);
+    setCurrentSessionId(sessionId);
+    setMessages(firebaseAIChatService.getCurrentMessages());
+    
+    toast({
+      title: "New Chat Started",
+      description: "Started a new conversation with Kabiraj AI",
+    });
   };
 
   // Speech recognition functions
@@ -197,46 +152,36 @@ export default function PatientAIChat() {
       return;
     }
 
-    try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = false;
-      recognitionRef.current.interimResults = false;
-      recognitionRef.current.lang = 'en-US';
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    recognitionRef.current = new SpeechRecognition();
+    recognitionRef.current.continuous = false;
+    recognitionRef.current.interimResults = false;
+    recognitionRef.current.lang = 'en-US';
 
-      recognitionRef.current.onstart = () => {
-        setIsListening(true);
-      };
+    recognitionRef.current.onstart = () => {
+      setIsListening(true);
+    };
 
-      recognitionRef.current.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInput(transcript);
-        setIsListening(false);
-      };
+    recognitionRef.current.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      setIsListening(false);
+    };
 
-      recognitionRef.current.onerror = () => {
-        setIsListening(false);
-        toast({
-          title: "Speech Recognition Error",
-          description: "Could not recognize speech. Please try again.",
-          variant: "destructive"
-        });
-      };
-
-      recognitionRef.current.onend = () => {
-        setIsListening(false);
-      };
-
-      recognitionRef.current.start();
-    } catch (error) {
-      console.error('Speech recognition error:', error);
+    recognitionRef.current.onerror = () => {
       setIsListening(false);
       toast({
         title: "Speech Recognition Error",
-        description: "Failed to start speech recognition",
+        description: "Could not recognize speech. Please try again.",
         variant: "destructive"
       });
-    }
+    };
+
+    recognitionRef.current.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current.start();
   };
 
   const stopListening = () => {
@@ -248,92 +193,73 @@ export default function PatientAIChat() {
 
   // Share with doctor
   const shareWithDoctor = () => {
-    try {
-      const summary = firebaseAIChatService.getConversationSummary();
-
-      if (summary === 'No conversation to share.' || messages.length <= 1) {
-        toast({
-          title: "Nothing to Share",
-          description: "Start a conversation first before sharing with a doctor.",
-          variant: "destructive"
-        });
-        return;
-      }
-
-      // Navigate to find doctor page with chat context
-      navigate('/patient/find-doctor', {
-        state: {
-          fromChat: true,
-          chatSummary: summary,
-          sessionId: currentSessionId
-        }
-      });
-    } catch (error) {
-      console.error('Error sharing with doctor:', error);
+    const summary = firebaseAIChatService.getConversationSummary();
+    
+    if (summary === 'No conversation to share.') {
       toast({
-        title: "Error",
-        description: "Failed to prepare chat for sharing",
+        title: "Nothing to Share",
+        description: "Start a conversation first before sharing with a doctor.",
         variant: "destructive"
       });
+      return;
     }
+
+    // Navigate to doctor selection or create a shareable link
+    navigate('/patient/share-chat', { 
+      state: { 
+        chatSummary: summary,
+        sessionId: currentSessionId 
+      } 
+    });
   };
 
   // Format AI message content
   const formatAIMessage = (content: string) => {
     if (!content) return null;
 
-    try {
-      // Replace **text** with bold text
-      let formattedText = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-
-      // Replace *text* with italic text
-      formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
-
-      // Replace numbered lists
-      formattedText = formattedText.replace(/(\d+\.\s)/g, '<br/>$1');
-
-      // Replace bullet points
-      formattedText = formattedText.replace(/•\s/g, '<br/>• ');
-
-      return <div dangerouslySetInnerHTML={{ __html: formattedText }} />;
-    } catch (error) {
-      console.error('Error formatting message:', error);
-      return <div>{content}</div>;
-    }
+    // Replace **text** with bold text
+    let formattedText = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    
+    // Replace *text* with italic text
+    formattedText = formattedText.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    
+    // Replace numbered lists
+    formattedText = formattedText.replace(/(\d+\.\s)/g, '<br/>$1');
+    
+    // Replace bullet points
+    formattedText = formattedText.replace(/•\s/g, '<br/>• ');
+    
+    return <div dangerouslySetInnerHTML={{ __html: formattedText }} />;
   };
 
   // Process vitals data if redirected from vitals page
   useEffect(() => {
     if (location.state?.vitalsData) {
       const { vitalsData, vitalsType } = location.state;
-
+      
       let vitalsMessage = "";
-
-      try {
-        if (vitalsType === 'bp') {
-          vitalsMessage = `I just measured my blood pressure and it's ${vitalsData.systolic}/${vitalsData.diastolic} mmHg`;
-          if (vitalsData.pulse) {
-            vitalsMessage += ` with a pulse of ${vitalsData.pulse} bpm`;
-          }
-        } else if (vitalsType === 'heart_rate') {
-          vitalsMessage = `I just measured my heart rate and it's ${vitalsData.bpm} beats per minute`;
-        } else if (vitalsType === 'temperature') {
-          vitalsMessage = `I just measured my body temperature and it's ${vitalsData.temperature}°C`;
-        } else if (vitalsType === 'oxygen') {
-          vitalsMessage = `I just measured my oxygen saturation and it's ${vitalsData.spo2}%`;
+      
+      if (vitalsType === 'bp') {
+        vitalsMessage = `I just measured my blood pressure and it's ${vitalsData.systolic}/${vitalsData.diastolic} mmHg`;
+        if (vitalsData.pulse) {
+          vitalsMessage += ` with a pulse of ${vitalsData.pulse} bpm`;
         }
-
-        if (vitalsMessage) {
-          // Send the vitals message after a short delay
-          setTimeout(() => {
-            sendMessage(vitalsMessage);
-          }, 500);
-
-          // Clear location state to prevent duplicate messages
-          navigate(location.pathname, { replace: true, state: {} });
-        }
-      } catch (error) {
-        console.error('Error processing vitals data:', error);
+      } else if (vitalsType === 'heart_rate') {
+        vitalsMessage = `I just measured my heart rate and it's ${vitalsData.bpm} beats per minute`;
+      } else if (vitalsType === 'temperature') {
+        vitalsMessage = `I just measured my body temperature and it's ${vitalsData.temperature}°C`;
+      } else if (vitalsType === 'oxygen') {
+        vitalsMessage = `I just measured my oxygen saturation and it's ${vitalsData.spo2}%`;
+      }
+      
+      if (vitalsMessage) {
+        // Send the vitals message
+        setTimeout(() => {
+          sendMessage(vitalsMessage);
+        }, 500);
+        
+        // Clear location state to prevent duplicate messages
+        navigate(location.pathname, { replace: true, state: {} });
       }
     }
   }, [location.state, navigate]);
@@ -343,16 +269,9 @@ export default function PatientAIChat() {
       {/* Header */}
       <div className="flex items-center justify-between p-4 text-white border-b border-white/10">
         <div className="flex items-center">
-          <button
-            className="mr-3 hover:bg-white/10 p-2 rounded-full transition"
-            onClick={() => navigate('/patient/dashboard')}
-          >
-            <ChevronLeft size={22} />
-          </button>
-
           <Sheet>
             <SheetTrigger asChild>
-              <button
+              <button 
                 className="mr-3 hover:bg-white/10 p-2 rounded-full transition"
                 onClick={() => {
                   if (user && !loadingHistory) {
@@ -375,7 +294,7 @@ export default function PatientAIChat() {
                 ) : chatHistory.length > 0 ? (
                   <div className="space-y-3">
                     {chatHistory.map((session) => (
-                      <div
+                      <div 
                         key={session.id}
                         className="p-3 rounded-lg bg-white/10 hover:bg-white/20 cursor-pointer transition"
                         onClick={() => loadChatSession(session)}
@@ -392,8 +311,8 @@ export default function PatientAIChat() {
                     <p>No previous chats found</p>
                   </div>
                 )}
-                <button
-                  className="w-full mt-4 py-2 px-4 rounded-lg bg-[#00C389] text-white flex items-center justify-center hover:bg-[#00B377] transition"
+                <button 
+                  className="w-full mt-4 py-2 px-4 rounded-lg bg-[#00C389] text-white flex items-center justify-center"
                   onClick={startNewChat}
                 >
                   <PlusCircle size={18} className="mr-2" />
@@ -402,15 +321,14 @@ export default function PatientAIChat() {
               </div>
             </SheetContent>
           </Sheet>
-
           <h1 className="text-xl font-semibold">Kabiraj AI</h1>
         </div>
-
+        
         <div className="flex items-center space-x-2">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
+                <button 
                   className="p-2 rounded-full hover:bg-white/10 transition"
                   onClick={() => navigate('/patient/vitals')}
                 >
@@ -422,11 +340,11 @@ export default function PatientAIChat() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-
+          
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
+                <button 
                   className="p-2 rounded-full hover:bg-white/10 transition"
                   onClick={shareWithDoctor}
                 >
@@ -442,13 +360,13 @@ export default function PatientAIChat() {
       </div>
 
       {/* Chat Messages */}
-      <div
+      <div 
         ref={chatContainerRef}
         className="flex-1 overflow-y-auto p-4 flex flex-col gap-4"
       >
         {messages.map((message) => (
-          <div
-            key={message.id}
+          <div 
+            key={message.id} 
             className={`max-w-[80%] ${message.role === 'user' ? 'self-end' : 'self-start'}`}
           >
             {message.role === 'assistant' && (
@@ -459,22 +377,22 @@ export default function PatientAIChat() {
                 <span className="text-xs text-white/70">Kabiraj AI</span>
               </div>
             )}
-
-            <div
+            
+            <div 
               className={`p-3 rounded-2xl shadow-md ${
-                message.role === 'user'
+                message.role === 'user' 
                   ? 'bg-[#00C389] text-white rounded-tr-none'
                   : 'bg-white text-gray-800 rounded-tl-none'
               }`}
             >
-              {message.role === 'assistant'
-                ? formatAIMessage(message.content)
+              {message.role === 'assistant' 
+                ? formatAIMessage(message.content) 
                 : message.content}
               <div className="text-xs mt-2 text-right opacity-70">
                 {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </div>
             </div>
-
+            
             {message.role === 'user' && (
               <div className="flex justify-end mt-1 mr-1">
                 <span className="text-xs text-white/70">You</span>
@@ -482,7 +400,7 @@ export default function PatientAIChat() {
             )}
           </div>
         ))}
-
+        
         {isLoading && (
           <div className="self-start max-w-[80%]">
             <div className="flex items-center mb-1 ml-1">
@@ -505,13 +423,13 @@ export default function PatientAIChat() {
       {/* Input Area */}
       <div className="bg-[#003840] p-4 border-t border-white/10">
         <div className="flex items-center bg-white rounded-full shadow-lg overflow-hidden">
-          <button
-            className={`p-3 transition ${isListening ? 'text-red-500' : 'text-gray-500'} hover:text-gray-700`}
+          <button 
+            className={`p-3 transition ${isListening ? 'text-red-500' : 'text-gray-500'}`}
             onClick={isListening ? stopListening : startListening}
           >
             <Mic size={20} />
           </button>
-
+          
           <input
             type="text"
             placeholder="Type your message..."
@@ -521,67 +439,56 @@ export default function PatientAIChat() {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (input.trim() && !isLoading) {
+                if (input.trim()) {
                   sendMessage();
                 }
               }
             }}
-            disabled={isLoading}
           />
-
-          <button
-            className={`p-3 transition ${
-              input.trim() && !isLoading ? 'text-[#00C389] hover:text-[#00B377]' : 'text-gray-300'
-            }`}
+          
+          <button 
+            className={`p-3 ${input.trim() ? 'text-[#00C389]' : 'text-gray-300'}`}
             onClick={() => {
-              if (input.trim() && !isLoading) {
+              if (input.trim()) {
                 sendMessage();
               }
             }}
-            disabled={!input.trim() || isLoading}
+            disabled={!input.trim()}
           >
             <Send size={20} />
           </button>
         </div>
-
+        
         <div className="flex justify-center mt-3 space-x-4">
-          <button
+          <button 
             className="flex flex-col items-center justify-center text-xs text-white/70 hover:text-white transition"
             onClick={() => navigate('/patient/vitals')}
           >
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center mb-1 hover:bg-white/20 transition">
+            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center mb-1">
               <Heart size={16} />
             </div>
             <span>Vitals</span>
           </button>
-
-          <button
+          
+          <button 
             className="flex flex-col items-center justify-center text-xs text-white/70 hover:text-white transition"
             onClick={shareWithDoctor}
           >
-            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center mb-1 hover:bg-white/20 transition">
+            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center mb-1">
               <MessageSquare size={16} />
             </div>
             <span>Ask Doctor</span>
           </button>
         </div>
       </div>
-
+      
       {/* Bottom Navigation */}
       <BottomNavigation />
-
+      
       {/* Error Toast */}
       {errorMessage && (
-        <div className="fixed bottom-24 left-0 right-0 mx-auto w-[90%] max-w-md bg-red-500 text-white p-3 rounded-lg shadow-lg z-50">
-          <div className="flex items-center justify-between">
-            <span className="text-sm">{errorMessage}</span>
-            <button
-              onClick={() => setErrorMessage("")}
-              className="ml-2 text-white hover:text-gray-200"
-            >
-              ×
-            </button>
-          </div>
+        <div className="fixed bottom-24 left-0 right-0 mx-auto w-[90%] max-w-md bg-red-500 text-white p-3 rounded-lg shadow-lg">
+          {errorMessage}
         </div>
       )}
     </div>

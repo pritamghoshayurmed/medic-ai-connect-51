@@ -38,24 +38,38 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'role', 'patient'),
     NEW.raw_user_meta_data->>'phone'
   );
-  
+
   -- Create doctor profile if user is a doctor
   IF NEW.raw_user_meta_data->>'role' = 'doctor' THEN
     INSERT INTO public.doctor_profiles (
-      id, 
-      experience_years, 
-      qualification, 
-      consultation_fee, 
+      id,
+      experience_years,
+      qualification,
+      consultation_fee,
       available_days,
       available_hours
     )
     VALUES (
-      NEW.id, 
+      NEW.id,
       0, -- Default experience years
       '', -- Default qualification
       0, -- Default consultation fee
       ARRAY[]::text[], -- Default available days (empty array)
       '{}'::jsonb -- Default available hours (empty JSON)
+    );
+  ELSE
+    -- Create patient profile if user is a patient (default)
+    INSERT INTO public.patient_profiles (
+      id,
+      blood_type,
+      allergies,
+      chronic_conditions
+    )
+    VALUES (
+      NEW.id,
+      NULL, -- Default blood type
+      ARRAY[]::text[], -- Default allergies (empty array)
+      ARRAY[]::text[] -- Default chronic conditions (empty array)
     );
   END IF;
 

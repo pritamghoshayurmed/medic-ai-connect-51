@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { doctorService } from "@/services/doctorService";
 import styled from "styled-components";
-import { 
-  ChevronLeft, 
-  Search, 
-  Bot, 
+import {
+  ChevronLeft,
+  Search,
+  Bot,
   MessageSquare
 } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
@@ -235,33 +236,39 @@ export default function Chat() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  
-  // Mock data for doctors chat history
-  const [doctors, setDoctors] = useState<Doctor[]>([
-    {
-      id: "1",
-      name: "Dr. Priya Sharma",
-      lastMessage: "Thank you for sharing that information. Let me know if you have any other questions.",
-      timestamp: "10:45 AM",
-      online: true,
-    },
-    {
-      id: "2",
-      name: "Dr. Samridhi Dev",
-      lastMessage: "I recommend you to take the medication as prescribed and rest well.",
-      timestamp: "Yesterday",
-      online: false,
-    },
-    {
-      id: "3",
-      name: "Dr. Koushik Das",
-      lastMessage: "Your test results look normal, but let me explain what each value means.",
-      timestamp: "Mon",
-      online: false,
-    }
-  ]);
-  
-  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>(doctors);
+  const [doctors, setDoctors] = useState<Doctor[]>([]);
+  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Load doctors from Supabase
+  useEffect(() => {
+    const loadDoctors = async () => {
+      try {
+        setLoading(true);
+        const doctorProfiles = await doctorService.getAllDoctors();
+
+        // Transform doctor profiles to chat format
+        const doctorChats: Doctor[] = doctorProfiles.map(doctor => ({
+          id: doctor.id,
+          name: doctor.full_name,
+          lastMessage: "Start a conversation with this doctor",
+          timestamp: "Available",
+          online: true, // For now, assume all doctors are online
+          avatar: undefined
+        }));
+
+        setDoctors(doctorChats);
+        setFilteredDoctors(doctorChats);
+        console.log(`Loaded ${doctorChats.length} doctors for chat`);
+      } catch (error) {
+        console.error('Error loading doctors:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDoctors();
+  }, []);
   
   // Filter doctors by search query
   useEffect(() => {
@@ -337,9 +344,13 @@ export default function Chat() {
           <StartChatButton>Start Chat</StartChatButton>
         </AICard>
         
-        {filteredDoctors.length > 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
+        ) : filteredDoctors.length > 0 ? (
           filteredDoctors.map(doctor => (
-            <ChatCard 
+            <ChatCard
               key={doctor.id}
               onClick={() => handleDoctorSelect(doctor.id)}
             >
@@ -351,13 +362,13 @@ export default function Chat() {
                   <AvatarImage src={doctor.avatar} alt={doctor.name} />
                 )}
               </Avatar>
-              
+
               <DoctorInfo>
                 <DoctorName>{doctor.name}</DoctorName>
                 <LastMessage>{doctor.lastMessage}</LastMessage>
                 <TimeStamp>{doctor.timestamp}</TimeStamp>
               </DoctorInfo>
-              
+
               {doctor.online && <OnlineBadge />}
             </ChatCard>
           ))

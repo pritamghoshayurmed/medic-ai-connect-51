@@ -278,7 +278,7 @@ export default function DoctorChatRooms() {
         }
         
         // Navigate to the chat
-        navigate(`/doctor/chat/${doctorId}`);
+        navigate(`/doctor/doctor-chat/${doctorId}`);
       }
       
     } catch (error) {
@@ -413,7 +413,7 @@ export default function DoctorChatRooms() {
                   <Card 
                     key={chat.id}
                     className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 cursor-pointer hover:bg-white hover:bg-opacity-20 transition-colors"
-                    onClick={() => navigate(`/doctor/chat/${chat.id}`)}
+                    onClick={() => navigate(`/doctor/doctor-chat/${chat.id}`)}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">
@@ -458,7 +458,7 @@ export default function DoctorChatRooms() {
                   <Card 
                     key={chat.id}
                     className="bg-white bg-opacity-10 backdrop-blur-sm border-white border-opacity-20 cursor-pointer hover:bg-white hover:bg-opacity-20 transition-colors"
-                    onClick={() => navigate(`/doctor/chat/${chat.id}`)}
+                    onClick={() => navigate(`/doctor/doctor-chat/${chat.id}`)}
                   >
                     <CardContent className="p-4">
                       <div className="flex items-center justify-between">

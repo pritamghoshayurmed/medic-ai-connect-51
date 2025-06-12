@@ -1,24 +1,38 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ChevronLeft, FileText, FileImage, Brain, Stethoscope, Settings, Users, Database, Search } from "lucide-react";
+import { ChevronLeft, FileText, FileImage, Brain, Stethoscope, Settings, Users, Database, Search, Download, Share2, Mail, Link, Eye, Calendar, User, Shield, Info, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import BottomNavigation from "@/components/BottomNavigation";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { toast } from "sonner";
 import ImageUploader from "@/components/ImageUploader";
 import AnalysisResults from "@/components/AnalysisResults";
 import MedicalQAChat from "@/components/MedicalQAChat";
+import StructuredDiagnosisDisplay from "@/components/StructuredDiagnosisDisplay";
+import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { analyzeImage, getAnalysisHistory, getGeminiApiKey } from "@/services/doctorAiService";
+import { enhancedDiagnosisService } from "@/services/enhancedDiagnosisService";
+import { reportExportService } from "@/services/reportExportService";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import { MEDICAL_DATA_SOURCES, DATA_SOURCE_CATEGORIES, RELIABILITY_LEVELS, ACCESS_LEVELS } from "@/config/medicalDataSources";
+import { MedicalDataSource, StructuredDiagnosisResponse, DiagnosisReportMetadata, ExportOptions, ShareOptions } from "@/types/diagnosis";
 
 const scanTypes = [
   {
@@ -43,18 +57,15 @@ const scanTypes = [
   },
 ];
 
-// Mock data for research database sources
-const dataSourcesAvailable = [
-  { id: 'pubmed', name: 'PubMed', icon: <Database className="h-4 w-4 mr-2" />, enabled: true },
-  { id: 'clinicaltrials', name: 'ClinicalTrials.gov', icon: <FileText className="h-4 w-4 mr-2" />, enabled: true },
-  { id: 'journals', name: 'Medical Journals Database', icon: <Search className="h-4 w-4 mr-2" />, enabled: false },
-  { id: 'case_studies', name: 'Case Studies Database', icon: <FileText className="h-4 w-4 mr-2" />, enabled: false },
-];
+// Enhanced medical data sources from configuration
+const dataSourcesAvailable = MEDICAL_DATA_SOURCES;
 
 export default function DiagnosisEngine() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { toast: uiToast } = useToast();
-  
+
+  // Basic state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -63,8 +74,33 @@ export default function DiagnosisEngine() {
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [hasApiKey, setHasApiKey] = useState(false);
-  const [dataSources, setDataSources] = useState(dataSourcesAvailable);
   const [advancedMode, setAdvancedMode] = useState(false);
+
+  // Enhanced diagnosis state
+  const [dataSources, setDataSources] = useState<MedicalDataSource[]>(dataSourcesAvailable);
+  const [structuredDiagnosis, setStructuredDiagnosis] = useState<StructuredDiagnosisResponse | null>(null);
+  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [showDataSourceSelector, setShowDataSourceSelector] = useState(false);
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showShareDialog, setShowShareDialog] = useState(false);
+  const [patientInfo, setPatientInfo] = useState({
+    age: '',
+    gender: '',
+    medicalHistory: ''
+  });
+  const [additionalContext, setAdditionalContext] = useState('');
+  const [exportOptions, setExportOptions] = useState<ExportOptions>({
+    format: 'pdf',
+    includeImages: true,
+    includeReferences: true,
+    includeMetadata: true,
+    template: 'standard'
+  });
+  const [shareOptions, setShareOptions] = useState<ShareOptions>({
+    recipients: [],
+    accessLevel: 'view',
+    requireLogin: true
+  });
 
   // Initialize API keys on component mount
   useEffect(() => {
@@ -96,9 +132,29 @@ export default function DiagnosisEngine() {
   );
 
   const handleFileSelect = (file: File) => {
+    console.log('📁 File selected:', file.name, file.type, file.size);
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error("Unsupported file type. Please upload a JPEG, PNG, or WebP image.");
+      return;
+    }
+
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      toast.error("Image file is too large. Please upload an image smaller than 10MB.");
+      return;
+    }
+
     setSelectedFile(file);
     setAnalysisResults(null);
-    
+    setStructuredDiagnosis(null);
+
+    // Show success message for valid file
+    toast.success(`Image "${file.name}" uploaded successfully`);
+
     // Check if API key is available
     if (!hasApiKey) {
       setApiKeyDialogOpen(true);
@@ -116,17 +172,117 @@ export default function DiagnosisEngine() {
       return;
     }
 
+    // Validate file size (max 10MB)
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (selectedFile.size > maxSize) {
+      toast.error("Image file is too large. Please upload an image smaller than 10MB.");
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(selectedFile.type)) {
+      toast.error("Unsupported file type. Please upload a JPEG, PNG, or WebP image.");
+      return;
+    }
+
+    console.log('🚀 Starting analysis process...');
+    console.log('📁 File details:', {
+      name: selectedFile.name,
+      type: selectedFile.type,
+      size: selectedFile.size,
+      advancedMode
+    });
+
     setIsAnalyzing(true);
-    
+
     try {
-      // Use Doctor AI service to analyze the image
-      const results = await analyzeImage(selectedFile);
-      setAnalysisResults(results);
-      toast.success("Analysis complete");
+      if (advancedMode) {
+        console.log('🔬 Using enhanced diagnosis mode...');
+
+        // Use enhanced diagnosis service for structured analysis
+        const selectedDataSources = dataSources.filter(source => source.enabled);
+
+        if (selectedDataSources.length === 0) {
+          toast.error("Please select at least one data source for analysis");
+          setIsAnalyzing(false);
+          return;
+        }
+
+        console.log('📊 Selected data sources:', selectedDataSources.map(ds => ds.name));
+
+        const patientData = {
+          age: patientInfo.age ? parseInt(patientInfo.age) : undefined,
+          gender: patientInfo.gender || undefined,
+          medicalHistory: patientInfo.medicalHistory ? [patientInfo.medicalHistory] : undefined
+        };
+
+        console.log('👤 Patient data:', patientData);
+        console.log('📝 Additional context:', additionalContext);
+
+        // Add timeout wrapper
+        const analysisPromise = enhancedDiagnosisService.generateStructuredDiagnosis(
+          selectedFile,
+          selectedDataSources,
+          patientData,
+          additionalContext
+        );
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Analysis timeout after 60 seconds')), 60000)
+        );
+
+        const structuredResult = await Promise.race([analysisPromise, timeoutPromise]) as StructuredDiagnosisResponse;
+
+        console.log('✅ Enhanced analysis completed successfully');
+
+        setStructuredDiagnosis(structuredResult);
+        setAnalysisResults({
+          findings: structuredResult.differentialDiagnoses.map(dx => dx.condition),
+          analysis: structuredResult.executiveSummary,
+          structured: true,
+          structuredData: structuredResult
+        });
+
+        toast.success("Enhanced analysis complete with structured diagnosis");
+      } else {
+        console.log('🔍 Using standard analysis mode...');
+
+        // Add timeout wrapper for standard analysis too
+        const analysisPromise = analyzeImage(selectedFile);
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Analysis timeout after 30 seconds')), 30000)
+        );
+
+        const results = await Promise.race([analysisPromise, timeoutPromise]);
+
+        console.log('✅ Standard analysis completed successfully');
+
+        setAnalysisResults(results);
+        toast.success("Analysis complete");
+      }
     } catch (error: any) {
-      console.error("Error analyzing image:", error);
-      toast.error(error.message || "Error analyzing image. Please try again.");
+      console.error("❌ Error analyzing image:", error);
+
+      // Provide specific error messages based on error type
+      let errorMessage = "Error analyzing image. Please try again.";
+
+      if (error.message?.includes('timeout')) {
+        errorMessage = "Analysis timed out. Please try again with a smaller image or check your connection.";
+      } else if (error.message?.includes('API key')) {
+        errorMessage = "Invalid API key. Please check your Gemini API key in settings.";
+        setApiKeyDialogOpen(true);
+      } else if (error.message?.includes('network') || error.code === 'ERR_NETWORK') {
+        errorMessage = "Network error. Please check your internet connection and try again.";
+      } else if (error.message?.includes('file type')) {
+        errorMessage = error.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+
+      toast.error(errorMessage);
     } finally {
+      console.log('🏁 Analysis process completed, resetting loading state');
       setIsAnalyzing(false);
     }
   };
@@ -172,13 +328,88 @@ export default function DiagnosisEngine() {
   };
 
   const toggleDataSource = (sourceId: string) => {
-    setDataSources(prev => 
-      prev.map(source => 
-        source.id === sourceId 
-          ? { ...source, enabled: !source.enabled } 
+    setDataSources(prev =>
+      prev.map(source =>
+        source.id === sourceId
+          ? { ...source, enabled: !source.enabled }
           : source
       )
     );
+  };
+
+  // Export functionality
+  const handleExportReport = async () => {
+    if (!structuredDiagnosis || !user) {
+      toast.error("No diagnosis available to export");
+      return;
+    }
+
+    setIsGeneratingReport(true);
+
+    try {
+      const metadata: DiagnosisReportMetadata = {
+        doctorInfo: {
+          name: user.name || user.full_name || 'Dr. Unknown',
+          license: 'Medical License #12345',
+          specialty: 'General Medicine',
+          institution: 'Medical Center'
+        },
+        patientInfo: patientInfo.age || patientInfo.gender ? {
+          age: patientInfo.age ? parseInt(patientInfo.age) : undefined,
+          gender: patientInfo.gender || undefined
+        } : undefined,
+        reportType: 'ai-assisted-diagnosis',
+        generatedAt: new Date().toISOString(),
+        dataSourcesUsed: dataSources.filter(ds => ds.enabled).map(ds => ds.name),
+        disclaimer: 'This report was generated with AI assistance and should be reviewed by a qualified medical professional. It is not a substitute for professional medical advice, diagnosis, or treatment.'
+      };
+
+      await reportExportService.exportReport(structuredDiagnosis, metadata, exportOptions);
+      toast.success(`Report exported as ${exportOptions.format.toUpperCase()}`);
+      setShowExportDialog(false);
+    } catch (error: any) {
+      console.error('Error exporting report:', error);
+      toast.error('Failed to export report');
+    } finally {
+      setIsGeneratingReport(false);
+    }
+  };
+
+  // Share functionality
+  const handleShareReport = async () => {
+    if (!structuredDiagnosis || !user) {
+      toast.error("No diagnosis available to share");
+      return;
+    }
+
+    try {
+      const metadata: DiagnosisReportMetadata = {
+        doctorInfo: {
+          name: user.name || user.full_name || 'Dr. Unknown',
+          license: 'Medical License #12345',
+          specialty: 'General Medicine',
+          institution: 'Medical Center'
+        },
+        reportType: 'ai-assisted-diagnosis',
+        generatedAt: new Date().toISOString(),
+        dataSourcesUsed: dataSources.filter(ds => ds.enabled).map(ds => ds.name),
+        disclaimer: 'This report was generated with AI assistance and should be reviewed by a qualified medical professional.'
+      };
+
+      const shareResult = await reportExportService.generateShareableLink(
+        structuredDiagnosis,
+        metadata,
+        shareOptions
+      );
+
+      // Copy to clipboard
+      await navigator.clipboard.writeText(shareResult.link);
+      toast.success(`Share link copied to clipboard! ${shareResult.accessCode ? `Access code: ${shareResult.accessCode}` : ''}`);
+      setShowShareDialog(false);
+    } catch (error: any) {
+      console.error('Error sharing report:', error);
+      toast.error('Failed to generate share link');
+    }
   };
 
   return (
@@ -298,29 +529,97 @@ export default function DiagnosisEngine() {
                         </div>
                         
                         {advancedMode && (
-                          <div>
-                            <label className="text-sm font-medium block mb-2 text-white">Select Data Sources</label>
-                            <div className="space-y-2">
-                              {dataSources.map(source => (
-                                <div key={source.id} className="flex items-center justify-between">
-                                  <div className="flex items-center text-white">
-                                    {source.icon}
-                                    <span className="text-sm">{source.name}</span>
-                                  </div>
-                                  <Button 
-                                    variant={source.enabled ? "default" : "outline"} 
-                                    size="sm"
-                                    className={source.enabled ? "" : "border-white/30 text-white hover:bg-white/20"}
-                                    onClick={() => toggleDataSource(source.id)}
-                                  >
-                                    {source.enabled ? "Enabled" : "Disabled"}
-                                  </Button>
-                                </div>
-                              ))}
+                          <div className="space-y-4">
+                            {/* Patient Information */}
+                            <div>
+                              <label className="text-sm font-medium block mb-2 text-white">Patient Information (Optional)</label>
+                              <div className="grid grid-cols-2 gap-2">
+                                <Input
+                                  placeholder="Age"
+                                  value={patientInfo.age}
+                                  onChange={(e) => setPatientInfo(prev => ({ ...prev, age: e.target.value }))}
+                                  className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                                />
+                                <Select value={patientInfo.gender} onValueChange={(value) => setPatientInfo(prev => ({ ...prev, gender: value }))}>
+                                  <SelectTrigger className="bg-white/10 border-white/20 text-white">
+                                    <SelectValue placeholder="Gender" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="male">Male</SelectItem>
+                                    <SelectItem value="female">Female</SelectItem>
+                                    <SelectItem value="other">Other</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <Textarea
+                                placeholder="Medical history or additional context..."
+                                value={patientInfo.medicalHistory}
+                                onChange={(e) => setPatientInfo(prev => ({ ...prev, medicalHistory: e.target.value }))}
+                                className="mt-2 bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                                rows={2}
+                              />
                             </div>
-                            <p className="text-xs text-white/70 mt-2">
-                              Select which medical databases to include in the analysis
-                            </p>
+
+                            {/* Data Sources Selection */}
+                            <div>
+                              <div className="flex items-center justify-between mb-2">
+                                <label className="text-sm font-medium text-white">Medical Data Sources</label>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => setShowDataSourceSelector(true)}
+                                  className="border-white/30 text-white hover:bg-white/20"
+                                >
+                                  <Settings className="h-4 w-4 mr-1" />
+                                  Configure
+                                </Button>
+                              </div>
+
+                              <div className="space-y-2 max-h-32 overflow-y-auto">
+                                {dataSources.filter(source => source.enabled).map(source => (
+                                  <div key={source.id} className="flex items-center justify-between p-2 bg-white/5 rounded border border-white/10">
+                                    <div className="flex items-center text-white">
+                                      {source.icon}
+                                      <span className="text-sm ml-2">{source.name}</span>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger>
+                                            <Info className="h-3 w-3 ml-1 text-white/50" />
+                                          </TooltipTrigger>
+                                          <TooltipContent>
+                                            <p className="max-w-xs">{source.description}</p>
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    </div>
+                                    <Badge variant="outline" className="text-xs border-white/30 text-white">
+                                      {RELIABILITY_LEVELS[source.reliability].name}
+                                    </Badge>
+                                  </div>
+                                ))}
+                              </div>
+
+                              {dataSources.filter(source => source.enabled).length === 0 && (
+                                <Alert className="bg-amber-500/20 border-amber-400/30">
+                                  <AlertCircle className="h-4 w-4" />
+                                  <AlertDescription className="text-amber-100">
+                                    No data sources selected. Please configure data sources for enhanced analysis.
+                                  </AlertDescription>
+                                </Alert>
+                              )}
+                            </div>
+
+                            {/* Additional Context */}
+                            <div>
+                              <label className="text-sm font-medium block mb-2 text-white">Additional Context</label>
+                              <Textarea
+                                placeholder="Specific symptoms, concerns, or areas to focus on..."
+                                value={additionalContext}
+                                onChange={(e) => setAdditionalContext(e.target.value)}
+                                className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
+                                rows={2}
+                              />
+                            </div>
                           </div>
                         )}
                       </div>
@@ -337,33 +636,108 @@ export default function DiagnosisEngine() {
             />
             
             {selectedFile && !analysisResults && (
-              <Button 
-                className="w-full mt-4 bg-white text-gray-900 hover:bg-white/90"
-                onClick={startAnalysis}
-                disabled={isAnalyzing || !hasApiKey}
-              >
-                {isAnalyzing ? "Analyzing..." : "Start Analysis"}
-              </Button>
+              <div className="mt-4 space-y-3">
+                {/* File Info Display */}
+                <div className="p-3 bg-white/5 rounded-md border border-white/10">
+                  <div className="flex items-center justify-between text-white text-sm">
+                    <div>
+                      <p className="font-medium">{selectedFile.name}</p>
+                      <p className="text-white/70">
+                        {selectedFile.type} • {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                      </p>
+                    </div>
+                    <CheckCircle className="h-5 w-5 text-green-400" />
+                  </div>
+                </div>
+
+                {/* Analysis Mode Info */}
+                {advancedMode && (
+                  <div className="p-3 bg-blue-500/10 rounded-md border border-blue-400/30">
+                    <div className="text-blue-100 text-sm">
+                      <p className="font-medium mb-1">Enhanced Analysis Mode</p>
+                      <p>Using {dataSources.filter(ds => ds.enabled).length} medical data sources</p>
+                      {patientInfo.age && <p>Patient age: {patientInfo.age}</p>}
+                      {patientInfo.gender && <p>Gender: {patientInfo.gender}</p>}
+                    </div>
+                  </div>
+                )}
+
+                <Button
+                  className="w-full bg-white text-gray-900 hover:bg-white/90"
+                  onClick={startAnalysis}
+                  disabled={isAnalyzing || !hasApiKey}
+                >
+                  {isAnalyzing ? (
+                    <div className="flex items-center">
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      {advancedMode ? "Performing Enhanced Analysis..." : "Analyzing..."}
+                    </div>
+                  ) : (
+                    <div className="flex items-center">
+                      <Brain className="h-4 w-4 mr-2" />
+                      {advancedMode ? "Start Enhanced Analysis" : "Start Analysis"}
+                    </div>
+                  )}
+                </Button>
+              </div>
             )}
             
             {isAnalyzing && (
               <div className="mt-4 p-4 bg-white/10 backdrop-blur-sm rounded-md border border-white/20">
-                <p className="animate-pulse text-center text-white">
-                  Analyzing your medical image...
-                </p>
+                <div className="flex items-center justify-center space-x-3">
+                  <Loader2 className="h-6 w-6 animate-spin text-white" />
+                  <div className="text-center text-white">
+                    <p className="font-medium">
+                      {advancedMode ? 'Performing Enhanced Analysis...' : 'Analyzing Medical Image...'}
+                    </p>
+                    <p className="text-sm text-white/70 mt-1">
+                      {advancedMode
+                        ? 'Processing with selected medical databases and generating structured diagnosis...'
+                        : 'This may take a few moments...'
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                {advancedMode && (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center text-white/80 text-sm">
+                      <CheckCircle className="h-4 w-4 mr-2 text-green-400" />
+                      Image uploaded and validated
+                    </div>
+                    <div className="flex items-center text-white/80 text-sm">
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Analyzing with AI and medical databases
+                    </div>
+                    <div className="flex items-center text-white/60 text-sm">
+                      <div className="h-4 w-4 mr-2 rounded-full border-2 border-white/30" />
+                      Generating structured diagnosis report
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             
             {analysisResults && (
               <div className="mt-6">
                 <ErrorBoundary>
-                  <AnalysisResults 
-                    analysis={{
-                      id: Date.now().toString(),
-                      ...analysisResults
-                    }}
-                    onStartChat={handleStartChat}
-                  />
+                  {analysisResults.structured && structuredDiagnosis ? (
+                    <StructuredDiagnosisDisplay
+                      diagnosis={structuredDiagnosis}
+                      onExport={() => setShowExportDialog(true)}
+                      onShare={() => setShowShareDialog(true)}
+                      onStartChat={handleStartChat}
+                      className="bg-white/95 backdrop-blur-sm border-white/20"
+                    />
+                  ) : (
+                    <AnalysisResults
+                      analysis={{
+                        id: Date.now().toString(),
+                        ...analysisResults
+                      }}
+                      onStartChat={handleStartChat}
+                    />
+                  )}
                 </ErrorBoundary>
               </div>
             )}
@@ -502,14 +876,148 @@ export default function DiagnosisEngine() {
             <SheetTitle>Discuss with Colleagues</SheetTitle>
           </SheetHeader>
           <div className="h-[calc(100vh-64px)]">
-            <MedicalQAChat 
-              userName="Dr. User" 
+            <MedicalQAChat
+              userName="Dr. User"
               analysisId={analysisResults?.id}
             />
           </div>
         </SheetContent>
       </Sheet>
-      
+
+      {/* Export Dialog */}
+      <Dialog open={showExportDialog} onOpenChange={setShowExportDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Export Diagnosis Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Export Format</Label>
+              <Select value={exportOptions.format} onValueChange={(value: any) => setExportOptions(prev => ({ ...prev, format: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pdf">PDF Document</SelectItem>
+                  <SelectItem value="docx">Word Document</SelectItem>
+                  <SelectItem value="txt">Plain Text</SelectItem>
+                  <SelectItem value="json">JSON Data</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label>Template</Label>
+              <Select value={exportOptions.template} onValueChange={(value: any) => setExportOptions(prev => ({ ...prev, template: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="standard">Standard Report</SelectItem>
+                  <SelectItem value="detailed">Detailed Analysis</SelectItem>
+                  <SelectItem value="summary">Executive Summary</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={exportOptions.includeImages}
+                  onCheckedChange={(checked) => setExportOptions(prev => ({ ...prev, includeImages: !!checked }))}
+                />
+                <Label>Include Images</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={exportOptions.includeReferences}
+                  onCheckedChange={(checked) => setExportOptions(prev => ({ ...prev, includeReferences: !!checked }))}
+                />
+                <Label>Include References</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  checked={exportOptions.includeMetadata}
+                  onCheckedChange={(checked) => setExportOptions(prev => ({ ...prev, includeMetadata: !!checked }))}
+                />
+                <Label>Include Metadata</Label>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setShowExportDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleExportReport} disabled={isGeneratingReport}>
+              {isGeneratingReport ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Generating...
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Share Dialog */}
+      <Dialog open={showShareDialog} onOpenChange={setShowShareDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Share Diagnosis Report</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Access Level</Label>
+              <Select value={shareOptions.accessLevel} onValueChange={(value: any) => setShareOptions(prev => ({ ...prev, accessLevel: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="view">View Only</SelectItem>
+                  <SelectItem value="comment">View & Comment</SelectItem>
+                  <SelectItem value="edit">Full Access</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                checked={shareOptions.requireLogin}
+                onCheckedChange={(checked) => setShareOptions(prev => ({ ...prev, requireLogin: !!checked }))}
+              />
+              <Label>Require Login</Label>
+            </div>
+
+            <div>
+              <Label>Recipients (Email addresses, comma-separated)</Label>
+              <Textarea
+                placeholder="doctor@example.com, colleague@hospital.com"
+                value={shareOptions.recipients.join(', ')}
+                onChange={(e) => setShareOptions(prev => ({
+                  ...prev,
+                  recipients: e.target.value.split(',').map(email => email.trim()).filter(Boolean)
+                }))}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button variant="outline" onClick={() => setShowShareDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleShareReport}>
+              <Link className="h-4 w-4 mr-2" />
+              Generate Share Link
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <BottomNavigation />
     </div>
   );

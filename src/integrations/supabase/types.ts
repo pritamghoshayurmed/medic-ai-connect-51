@@ -238,6 +238,41 @@ export type Database = {
           },
         ]
       }
+      patient_profiles: {
+        Row: {
+          allergies: string[]
+          blood_type: string | null
+          chronic_conditions: string[]
+          created_at: string | null
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          allergies?: string[]
+          blood_type?: string | null
+          chronic_conditions?: string[]
+          created_at?: string | null
+          id: string
+          updated_at?: string | null
+        }
+        Update: {
+          allergies?: string[]
+          blood_type?: string | null
+          chronic_conditions?: string[]
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "patient_profiles_id_fkey"
+            columns: ["id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           created_at: string | null

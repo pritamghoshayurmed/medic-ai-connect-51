@@ -5,19 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Heart, 
-  Calendar, 
-  User, 
-  Pill, 
-  MessageSquare, 
-  Activity, 
-  Bell, 
+import {
+  Heart,
+  Calendar,
+  User,
+  Pill,
+  MessageSquare,
+  Activity,
+  Bell,
   Lock,
   Search,
   Home,
   LineChart,
-  Clock, 
+  Clock,
   ChevronRight,
   BookOpen,
 } from "lucide-react";
@@ -25,6 +25,8 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
 import styled from "styled-components";
+import { useAllDoctors, useAppointments } from "@/hooks/useDatabase";
+import { Doctor } from "@/types";
 
 // Styled components for the new design
 const DashboardContainer = styled.div`
@@ -82,7 +84,7 @@ const Hello = styled.h1`
   margin-bottom: 5px;
 `;
 
-const Date = styled.p`
+const DateText = styled.p`
   font-size: 16px;
   opacity: 0.9;
 `;
@@ -448,40 +450,23 @@ const NavIcon = styled.div`
 export default function PatientDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  
-  const [loading, setLoading] = useState(true);
-  const [userData, setUserData] = useState({
-    name: "Pritam",
-    date: "Saturday, May 31"
-  });
+
+  // Fetch real data from database
+  const { data: doctors = [], isLoading: doctorsLoading } = useAllDoctors();
+  const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments(user?.id, user?.role);
+
   const [vitals, setVitals] = useState({
     heartRate: 76,
     bloodPressure: "120/80",
   });
-  
-  const [doctors, setDoctors] = useState([
-    {
-      id: 1,
-      name: "Priya Sharma",
-      specialty: "Cardiologist",
-      experience: "5 Years Experience",
-      avatar: "/assets/doctors/doctor1.jpg",
-    },
-    {
-      id: 2,
-      name: "Samridhi Dev",
-      specialty: "Orthopedic",
-      experience: "8 Years Experience",
-      avatar: "/assets/doctors/doctor2.jpg",
-    },
-    {
-      id: 3,
-      name: "Koushik Das",
-      specialty: "Neurologist",
-      experience: "10 Years Experience",
-      avatar: "/assets/doctors/doctor3.jpg",
-    },
-  ]);
+
+  const loading = doctorsLoading || appointmentsLoading;
+
+  // Get user data from auth context
+  const userData = {
+    name: user?.name || "User",
+    date: format(new Date(), "EEEE, MMMM d")
+  };
   
   const [articles, setArticles] = useState([
     {
@@ -528,18 +513,11 @@ export default function PatientDashboard() {
     }
   ]);
   
-  useEffect(() => {
-    // Simulate data loading
-    setTimeout(() => {
-      setLoading(false);
-    }, 1000);
-  }, []);
-  
-  const handleViewDoctorProfile = (doctorId: number) => {
+  const handleViewDoctorProfile = (doctorId: string) => {
     navigate(`/patient/doctor-profile/${doctorId}`);
   };
-  
-  const handleBookAppointment = (doctorId: number) => {
+
+  const handleBookAppointment = (doctorId: string) => {
     navigate(`/patient/book-appointment/${doctorId}`);
   };
   
@@ -583,7 +561,7 @@ export default function PatientDashboard() {
       
       <Greeting>
         <Hello>Hello, {userData.name}!</Hello>
-        <Date>{userData.date}</Date>
+        <DateText>{userData.date}</DateText>
       </Greeting>
       
       <QuickActionsRow>
@@ -593,7 +571,9 @@ export default function PatientDashboard() {
           </ActionIcon>
           <ActionText>Find Doctor</ActionText>
         </ActionButton>
-        
+
+
+
         <ActionButton onClick={() => navigate("/patient/appointments")}>
           <ActionIcon>
             <Calendar size={22} />
@@ -650,7 +630,7 @@ export default function PatientDashboard() {
           <SeeAllText onClick={handleViewAllDoctors}>See all <ChevronRight size={14} /></SeeAllText>
         </SectionTitle>
         
-        {doctors.map(doctor => (
+        {doctors.slice(0, 3).map(doctor => (
           <DoctorCard key={doctor.id}>
             <DoctorInfo>
               <DoctorAvatar onClick={() => handleViewDoctorProfile(doctor.id)}>
@@ -658,20 +638,20 @@ export default function PatientDashboard() {
                   <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
                 </Avatar>
               </DoctorAvatar>
-              
+
               <DoctorDetails onClick={() => handleViewDoctorProfile(doctor.id)}>
                 <DoctorName>{doctor.name}</DoctorName>
-                <DoctorSpecialty>{doctor.specialty}</DoctorSpecialty>
-                <DoctorExperience>{doctor.experience}</DoctorExperience>
+                <DoctorSpecialty>{doctor.specialty || 'General Practitioner'}</DoctorSpecialty>
+                <DoctorExperience>{doctor.experience ? `${doctor.experience} Years Experience` : 'Experienced Doctor'}</DoctorExperience>
               </DoctorDetails>
             </DoctorInfo>
-            
+
             <DoctorActions>
               <DoctorButton onClick={() => navigate(`/patient/doctor-chat/${doctor.id}`)}>
                 <MessageSquare size={16} />
                 Chat
               </DoctorButton>
-              
+
               <DoctorButton $primary onClick={() => handleBookAppointment(doctor.id)}>
                 Book Appointment
               </DoctorButton>

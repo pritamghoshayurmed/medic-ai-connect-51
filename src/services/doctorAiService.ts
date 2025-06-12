@@ -39,26 +39,20 @@ const initialAnalysisHistory = [
 export function getGeminiApiKey(): string {
   // Check environment variable first (Vite exposes these with import.meta.env)
   const envKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (envKey && envKey !== 'your-gemini-api-key') {
+  if (envKey && envKey !== 'your_gemini_api_key_here' && envKey.trim() !== '') {
     console.log('Using Gemini API key from environment');
     return envKey;
   }
-  
-  // Hardcoded key for development - should be replaced in production
-  const hardcodedKey = 'AIzaSyAgsGk0-pnK61i2x5Gusf0qnSfUotWgx-U';
-  if (hardcodedKey) {
-    console.log('Using hardcoded Gemini API key (not recommended for production)');
-    return hardcodedKey;
-  }
-  
-  // Check localStorage as last resort
+
+  // Check localStorage as fallback for user-provided keys
   const localStorageKey = localStorage.getItem(LOCAL_STORAGE_API_KEY);
-  if (localStorageKey && localStorageKey !== 'your-gemini-api-key') {
+  if (localStorageKey && localStorageKey !== 'your_gemini_api_key_here' && localStorageKey.trim() !== '') {
     console.log('Using Gemini API key from localStorage');
     return localStorageKey;
   }
-  
-  console.warn('No valid Gemini API key found!');
+
+  // No valid API key found
+  console.warn('No valid Gemini API key found! Please set VITE_GEMINI_API_KEY environment variable or add key in settings.');
   return '';
 }
 
@@ -187,7 +181,7 @@ const saveAnalysisToHistory = (analysis: any) => {
 /**
  * Convert a file to a base64 data URL
  */
-async function fileToBase64(file: File): Promise<string> {
+export async function fileToBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

@@ -117,7 +117,7 @@ AS $$
 BEGIN
   -- Create trigger function for handling new user signups
   CREATE OR REPLACE FUNCTION public.handle_new_user()
-  RETURNS TRIGGER AS 
+  RETURNS TRIGGER AS
   $INNER$
   BEGIN
     -- Insert new profile
@@ -130,28 +130,43 @@ BEGIN
       NEW.raw_user_meta_data->>'phone'
     )
     ON CONFLICT (id) DO NOTHING;
-    
+
     -- Create doctor profile if user is a doctor
     IF COALESCE(NEW.raw_user_meta_data->>'role', 'patient') = 'doctor' THEN
       INSERT INTO public.doctor_profiles (
-        id, 
-        experience_years, 
-        qualification, 
-        consultation_fee, 
+        id,
+        experience_years,
+        qualification,
+        consultation_fee,
         available_days,
         available_hours
       )
       VALUES (
-        NEW.id, 
-        0, 
-        '', 
-        0, 
-        ARRAY[]::text[], 
-        '{}'::jsonb 
+        NEW.id,
+        0,
+        '',
+        0,
+        ARRAY[]::text[],
+        '{}'::jsonb
+      )
+      ON CONFLICT (id) DO NOTHING;
+    ELSE
+      -- Create patient profile if user is a patient (default)
+      INSERT INTO public.patient_profiles (
+        id,
+        blood_type,
+        allergies,
+        chronic_conditions
+      )
+      VALUES (
+        NEW.id,
+        NULL,
+        ARRAY[]::text[],
+        ARRAY[]::text[]
       )
       ON CONFLICT (id) DO NOTHING;
     END IF;
-  
+
     RETURN NEW;
   END;
   $INNER$ LANGUAGE plpgsql SECURITY DEFINER;

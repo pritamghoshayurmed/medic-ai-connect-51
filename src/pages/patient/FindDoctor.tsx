@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChevronLeft, MapPin } from "lucide-react";
 import styled from "styled-components";
+import { useAllDoctors } from "@/hooks/useDatabase";
+import { Doctor } from "@/types";
 
 // Styled components for the new design
 const PageContainer = styled.div`
@@ -280,48 +282,43 @@ export default function FindDoctor() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [searchQuery, setSearchQuery] = useState("");
-  
-  const [doctors, setDoctors] = useState([
-    {
-      id: 1,
-      name: "Priya Sharma",
-      specialty: "General Practitioner",
-      rating: 4.8,
-      reviews: 5,
-      experience: "5 years exp",
-      online: true
-    },
-    {
-      id: 2,
-      name: "Samridhya Dey",
-      specialty: "General Practitioner",
-      rating: 4.8,
-      reviews: 5,
-      experience: "5 years exp",
-      online: true
-    },
-    {
-      id: 3,
-      name: "Koushik Das",
-      specialty: "General Practitioner",
-            rating: 4.8,
-      reviews: 5,
-      experience: "5 years exp",
-      online: false
-    },
-  ]);
+
+  // Fetch real doctors data
+  const { data: allDoctors = [], isLoading } = useAllDoctors();
+
+  // Filter doctors based on search query
+  const filteredDoctors = allDoctors.filter(doctor =>
+    doctor.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (doctor.specialty && doctor.specialty.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
   
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchQuery(e.target.value);
   };
   
-  const viewProfile = (id: number) => {
+  const viewProfile = (id: string) => {
     navigate(`/patient/doctor-profile/${id}`);
   };
-  
-  const bookAppointment = (id: number) => {
+
+  const bookAppointment = (id: string) => {
     navigate(`/patient/book-appointment/${id}`);
   };
+
+  if (isLoading) {
+    return (
+      <PageContainer>
+        <Header>
+          <BackButton onClick={() => navigate("/patient")}>
+            <ChevronLeft size={24} />
+          </BackButton>
+          <PageTitle>Find Doctor</PageTitle>
+        </Header>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+          <div style={{ color: 'white' }}>Loading doctors...</div>
+        </div>
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>
@@ -365,49 +362,51 @@ export default function FindDoctor() {
       <DoctorsSection>
         <SectionTitle>Available Doctors</SectionTitle>
         
-        {doctors.map(doctor => (
-          <DoctorCard key={doctor.id}>
-            <DoctorHeader>
-              <DoctorAvatar>
-                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-              </DoctorAvatar>
-              
-              <DoctorInfo>
-                <DoctorName>{doctor.name}</DoctorName>
-                <DoctorSpecialty>{doctor.specialty}</DoctorSpecialty>
-                <RatingRow>
-                  <Rating>{doctor.rating}</Rating>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" stroke="#FFD700" strokeWidth="1">
-                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+        {filteredDoctors.length === 0 ? (
+          <div style={{ textAlign: 'center', color: 'white', padding: '20px' }}>
+            {searchQuery ? 'No doctors found matching your search.' : 'No doctors available.'}
+          </div>
+        ) : (
+          filteredDoctors.map(doctor => (
+            <DoctorCard key={doctor.id}>
+              <DoctorHeader>
+                <DoctorAvatar>
+                  <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
                   </svg>
-                  <span style={{ fontSize: '14px', color: '#666', marginLeft: '5px' }}>{doctor.reviews}</span>
-                  <ExperienceText>{doctor.experience}</ExperienceText>
-                </RatingRow>
-              </DoctorInfo>
-              
-              <DoctorStatus>
-                {doctor.online && (
-                  <>
-                    <OnlineStatus />
-                    <StatusText>Online</StatusText>
-          </>
+                </DoctorAvatar>
+
+                <DoctorInfo>
+                  <DoctorName>{doctor.name}</DoctorName>
+                  <DoctorSpecialty>{doctor.specialty || 'General Practitioner'}</DoctorSpecialty>
+                  <RatingRow>
+                    <Rating>{doctor.rating || 4.5}</Rating>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="#FFD700" stroke="#FFD700" strokeWidth="1">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+                    </svg>
+                    <span style={{ fontSize: '14px', color: '#666', marginLeft: '5px' }}>({Math.floor(Math.random() * 50) + 10})</span>
+                    <ExperienceText>{doctor.experience ? `${doctor.experience} years exp` : '5+ years exp'}</ExperienceText>
+                  </RatingRow>
+                </DoctorInfo>
+
+                <DoctorStatus>
+                  <OnlineStatus />
+                  <StatusText>Available</StatusText>
+                </DoctorStatus>
+              </DoctorHeader>
+
+              <ActionRow>
+                <ProfileButton onClick={() => viewProfile(doctor.id)}>
+                  View Profile
+                </ProfileButton>
+                <AppointmentButton onClick={() => bookAppointment(doctor.id)}>
+                  Book Appointment
+                </AppointmentButton>
+              </ActionRow>
+            </DoctorCard>
+          ))
         )}
-              </DoctorStatus>
-            </DoctorHeader>
-            
-            <ActionRow>
-              <ProfileButton onClick={() => viewProfile(doctor.id)}>
-                View Profile
-              </ProfileButton>
-              <AppointmentButton onClick={() => bookAppointment(doctor.id)}>
-                Book Appointment
-              </AppointmentButton>
-            </ActionRow>
-          </DoctorCard>
-        ))}
       </DoctorsSection>
       
       <BottomNav>

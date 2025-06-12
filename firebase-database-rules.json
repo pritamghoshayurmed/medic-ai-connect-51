@@ -1,0 +1,68 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": "auth != null",
+    "chats": {
+      "doctor-patient": {
+        "$chatId": {
+          ".read": "auth != null",
+          ".write": "auth != null",
+          "participants": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+          },
+          "messages": {
+            "$messageId": {
+              ".read": "auth != null",
+              ".write": "auth != null"
+            }
+          },
+          "lastMessage": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+          },
+          "lastActivity": {
+            ".read": "auth != null",
+            ".write": "auth != null"
+          },
+          "unreadCount": {
+            "$userId": {
+              ".read": "auth != null",
+              ".write": "auth != null"
+            }
+          }
+        }
+      },
+      "ai-history": {
+        "$userId": {
+          ".read": "auth != null",
+          ".write": "auth != null",
+          "sessions": {
+            "$sessionId": {
+              ".read": "auth != null",
+              ".write": "auth != null"
+            }
+          }
+        }
+      }
+    },
+    "presence": {
+      "$userId": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+    "typing": {
+      "$chatId": {
+        "$userId": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    },
+    "test": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    }
+  }
+}

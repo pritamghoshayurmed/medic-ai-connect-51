@@ -1,17 +1,22 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { firebaseChatService, FirebaseMessage } from "@/services/firebaseChatService";
+import { doctorService } from "@/services/doctorService";
+import { userMappingService } from "@/services/userMappingService";
 import styled from "styled-components";
-import { 
-  ChevronLeft, 
-  Mic, 
-  Send, 
-  Image as ImageIcon, 
-  Paperclip, 
-  Home, 
-  Search, 
-  Activity, 
-  MessageSquare, 
+import {
+  ChevronLeft,
+  Mic,
+  Send,
+  Image as ImageIcon,
+  Paperclip,
+  Home,
+  Search,
+  Activity,
+  MessageSquare,
   User,
   Video
 } from "lucide-react";
@@ -194,14 +199,9 @@ const NavIcon = styled.div`
   margin-bottom: 5px;
 `;
 
-interface Message {
-  id: number;
-  text: string;
-  isSent: boolean;
-  time: string;
-}
+// Use Firebase message type
+type Message = FirebaseMessage;
 
-// Mock doctor data
 interface DoctorData {
   id: string;
   name: string;
@@ -210,146 +210,97 @@ interface DoctorData {
   avatar?: string;
 }
 
-const DOCTORS_DATA: Record<string, DoctorData> = {
-  "1": {
-    id: "1",
-    name: "Dr. Priya Sharma",
-    specialty: "Cardiologist",
-    online: true,
-    avatar: "/doctor-avatar-1.png"
-  },
-  "2": {
-    id: "2",
-    name: "Dr. Samridhi Dev",
-    specialty: "Orthopedic",
-    online: false,
-    avatar: "/doctor-avatar-2.png"
-  },
-  "3": {
-    id: "3",
-    name: "Dr. Koushik Das",
-    specialty: "Neurologist",
-    online: true,
-    avatar: "/doctor-avatar-3.png"
-  }
-};
 
-// Mock conversations
-const MOCK_CONVERSATIONS: Record<string, Message[]> = {
-  "1": [
-    {
-      id: 1,
-      text: "Hello, how can I help you today?",
-      isSent: false,
-      time: "10:30 AM"
-    },
-    {
-      id: 2,
-      text: "I've been experiencing some chest pain lately.",
-      isSent: true,
-      time: "10:32 AM"
-    },
-    {
-      id: 3,
-      text: "Can you tell me when it started and describe the pain?",
-      isSent: false,
-      time: "10:33 AM"
-    },
-    {
-      id: 4,
-      text: "It started about a week ago. The pain is sharp and happens mostly when I take deep breaths.",
-      isSent: true,
-      time: "10:35 AM"
-    },
-    {
-      id: 5,
-      text: "I see. Have you noticed any other symptoms like shortness of breath, fever or fatigue?",
-      isSent: false,
-      time: "10:37 AM"
-    }
-  ],
-  "2": [
-    {
-      id: 1,
-      text: "Good morning, what can I do for you?",
-      isSent: false,
-      time: "09:15 AM"
-    },
-    {
-      id: 2,
-      text: "I'm having pain in my right knee after jogging yesterday.",
-      isSent: true,
-      time: "09:17 AM"
-    },
-    {
-      id: 3,
-      text: "Is it swollen or red? Can you rate the pain on a scale from 1 to 10?",
-      isSent: false,
-      time: "09:18 AM"
-    },
-    {
-      id: 4,
-      text: "It's slightly swollen but not red. The pain is about 6/10 when I walk.",
-      isSent: true,
-      time: "09:20 AM"
-    }
-  ],
-  "3": [
-    {
-      id: 1,
-      text: "Hello there, how can I assist you today?",
-      isSent: false,
-      time: "02:45 PM"
-    },
-    {
-      id: 2,
-      text: "I've been having frequent headaches for the past week.",
-      isSent: true,
-      time: "02:46 PM"
-    },
-    {
-      id: 3,
-      text: "I'm sorry to hear that. Can you describe the headache? Is it on one side or both sides of your head?",
-      isSent: false,
-      time: "02:48 PM"
-    },
-    {
-      id: 4,
-      text: "It's usually on both sides, and it feels like a dull pressure. It gets worse in the afternoon.",
-      isSent: true,
-      time: "02:50 PM"
-    },
-    {
-      id: 5,
-      text: "Have you been staying hydrated? How's your stress level and sleep quality recently?",
-      isSent: false,
-      time: "02:52 PM"
-    }
-  ]
-};
+
+
 
 export default function DoctorPatientChat() {
   const { id } = useParams<{ id: string }>();
-  const doctorId = id || "1"; // Default to first doctor if no ID provided
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("doctors");
   const [message, setMessage] = useState("");
   const chatContainerRef = useRef<HTMLDivElement>(null);
-  
-  // Get doctor data based on ID
-  const [doctor, setDoctor] = useState<DoctorData>(DOCTORS_DATA[doctorId] || DOCTORS_DATA["1"]);
-  
-  // Get conversation based on doctor ID
-  const [messages, setMessages] = useState<Message[]>(
-    MOCK_CONVERSATIONS[doctorId] || MOCK_CONVERSATIONS["1"]
-  );
-  
-  // Update doctor and messages when ID changes
+
+  const [doctor, setDoctor] = useState<DoctorData | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch doctor data and setup Firebase listener
   useEffect(() => {
-    setDoctor(DOCTORS_DATA[doctorId] || DOCTORS_DATA["1"]);
-    setMessages(MOCK_CONVERSATIONS[doctorId] || MOCK_CONVERSATIONS["1"]);
-  }, [doctorId]);
+    if (!user || !id) return;
+
+    const fetchDoctorAndSetupChat = async () => {
+      try {
+        setLoading(true);
+
+        // Fetch doctor information using the doctor service
+        const doctorProfile = await doctorService.getDoctorById(id);
+
+        if (!doctorProfile) {
+          console.error('Doctor not found with ID:', id);
+          toast({
+            title: "Error",
+            description: "Failed to load doctor information",
+            variant: "destructive"
+          });
+          return;
+        }
+
+        setDoctor({
+          id: doctorProfile.id,
+          name: doctorProfile.full_name || 'Unknown Doctor',
+          specialty: doctorProfile.specialty?.name || 'General Practitioner',
+          online: true,
+          avatar: undefined
+        });
+
+        console.log('Doctor loaded successfully:', doctorProfile.full_name);
+
+        // Get Firebase user IDs for chat
+        const patientFirebaseId = await userMappingService.getFirebaseUserId(user.id);
+        const doctorFirebaseId = await userMappingService.getFirebaseUserId(id);
+
+        console.log(`Setting up chat: Patient ${user.id} -> ${patientFirebaseId}, Doctor ${id} -> ${doctorFirebaseId}`);
+
+        // Setup Firebase real-time listener for messages
+        const unsubscribe = firebaseChatService.listenToDoctorPatientMessages(
+          patientFirebaseId,
+          doctorFirebaseId,
+          (firebaseMessages) => {
+            setMessages(firebaseMessages);
+            setLoading(false);
+          }
+        );
+
+        // Mark messages as read
+        await firebaseChatService.markMessagesAsRead(patientFirebaseId, doctorFirebaseId);
+
+        // Cleanup function
+        return () => {
+          unsubscribe();
+        };
+
+      } catch (error) {
+        console.error('Error in fetchDoctorAndSetupChat:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load chat data",
+          variant: "destructive"
+        });
+        setLoading(false);
+      }
+    };
+
+    const cleanup = fetchDoctorAndSetupChat();
+
+    return () => {
+      cleanup.then(cleanupFn => {
+        if (cleanupFn) cleanupFn();
+      });
+    };
+  }, [user, id, toast]);
   
   useEffect(() => {
     // Scroll to bottom whenever messages change
@@ -358,34 +309,37 @@ export default function DoctorPatientChat() {
     }
   }, [messages]);
   
-  const handleSendMessage = () => {
-    if (message.trim() === "") return;
-    
-    // Create new message
-    const newMessage: Message = {
-      id: messages.length + 1,
-      text: message,
-      isSent: true,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-    
-    // Add message to state
-    setMessages([...messages, newMessage]);
-    
-    // Clear input
-    setMessage("");
-    
-    // Simulate doctor response after a delay
-    setTimeout(() => {
-      const doctorResponse: Message = {
-        id: messages.length + 2,
-        text: "Thank you for sharing that information. Based on your symptoms, I'd like to schedule an appointment to examine you in person. Would tomorrow at 2 PM work for you?",
-        isSent: false,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      
-      setMessages(prev => [...prev, doctorResponse]);
-    }, 3000);
+  const handleSendMessage = async () => {
+    if (message.trim() === "" || !user || !id || !doctor) return;
+
+    const messageContent = message.trim();
+    setMessage(""); // Clear input immediately
+
+    try {
+      // Get Firebase user IDs for sending message
+      const patientFirebaseId = await userMappingService.getFirebaseUserId(user.id);
+      const doctorFirebaseId = await userMappingService.getFirebaseUserId(id);
+
+      // Send message via Firebase
+      await firebaseChatService.sendDoctorPatientMessage(
+        patientFirebaseId,
+        doctorFirebaseId,
+        messageContent,
+        user.name || user.full_name || 'Patient',
+        'patient'
+      );
+
+      console.log('Message sent successfully via Firebase');
+
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send message",
+        variant: "destructive"
+      });
+      setMessage(messageContent); // Restore message on error
+    }
   };
   
   const handleTabChange = (tab: string) => {
@@ -407,25 +361,36 @@ export default function DoctorPatientChat() {
           <ChevronLeft size={24} />
         </BackButton>
         
-        <DoctorInfo onClick={() => navigate(`/patient/doctor-profile/${doctor.id}`)}>
-          <DoctorAvatar>
-            <Avatar className="h-12 w-12">
-              <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
-              {doctor.avatar && <AvatarImage src={doctor.avatar} alt={doctor.name} />}
-            </Avatar>
-          </DoctorAvatar>
-          
-          <DoctorDetails>
-            <DoctorName>{doctor.name}</DoctorName>
-            <OnlineStatus>{doctor.online ? "Online" : "Offline"}</OnlineStatus>
-          </DoctorDetails>
-        </DoctorInfo>
-        
-        <ActionButtons>
-          <ActionButton onClick={() => navigate(`/patient/video-call/${doctor.id}`)}>
-            <Video size={20} />
-          </ActionButton>
-        </ActionButtons>
+        {doctor ? (
+          <>
+            <DoctorInfo onClick={() => navigate(`/patient/doctor-profile/${doctor.id}`)}>
+              <DoctorAvatar>
+                <Avatar className="h-12 w-12">
+                  <AvatarFallback>{doctor.name.charAt(0)}</AvatarFallback>
+                  {doctor.avatar && <AvatarImage src={doctor.avatar} alt={doctor.name} />}
+                </Avatar>
+              </DoctorAvatar>
+
+              <DoctorDetails>
+                <DoctorName>{doctor.name}</DoctorName>
+                <OnlineStatus>{doctor.online ? "Online" : "Offline"}</OnlineStatus>
+              </DoctorDetails>
+            </DoctorInfo>
+
+            <ActionButtons>
+              <ActionButton onClick={() => navigate(`/patient/video-call/${doctor.id}`)}>
+                <Video size={20} />
+              </ActionButton>
+            </ActionButtons>
+          </>
+        ) : (
+          <DoctorInfo>
+            <DoctorDetails>
+              <DoctorName>Loading...</DoctorName>
+              <OnlineStatus>Connecting...</OnlineStatus>
+            </DoctorDetails>
+          </DoctorInfo>
+        )}
       </Header>
       
       <TabsContainer>
@@ -445,12 +410,23 @@ export default function DoctorPatientChat() {
       </TabsContainer>
       
       <ChatContainer ref={chatContainerRef}>
-        {messages.map(msg => (
-          <MessageBubble key={msg.id} isSent={msg.isSent}>
-            <MessageText>{msg.text}</MessageText>
-            <MessageTime>{msg.time}</MessageTime>
-          </MessageBubble>
-        ))}
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
+          </div>
+        ) : (
+          messages.map(msg => (
+            <MessageBubble key={msg.id} isSent={msg.senderId === user?.id}>
+              <MessageText>{msg.content}</MessageText>
+              <MessageTime>
+                {new Date(msg.timestamp).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </MessageTime>
+            </MessageBubble>
+          ))
+        )}
       </ChatContainer>
       
       <InputContainer>

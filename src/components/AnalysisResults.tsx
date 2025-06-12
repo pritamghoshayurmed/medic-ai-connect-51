@@ -8,6 +8,7 @@ import { generateReport, fetchRelatedLiterature, fetchRelatedClinicalTrials } fr
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import HeatmapVisualization from './HeatmapVisualization';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface Analysis {
   id: string;
@@ -190,16 +191,28 @@ export default function AnalysisResults({ analysis, onStartChat }: AnalysisResul
                 </h3>
                 <ul className="list-disc list-inside space-y-1 pl-2">
                   {analysis.findings.map((finding, index) => (
-                    <li key={index} className="text-gray-700">{finding}</li>
+                    <li key={index} className="text-gray-700">
+                      <MarkdownRenderer
+                        content={finding}
+                        variant="compact"
+                        className="inline"
+                      />
+                    </li>
                   ))}
                 </ul>
               </div>
-              
+
               <Separator />
-              
+
               <div>
                 <h3 className="font-semibold mb-2">Detailed Analysis</h3>
-                <p className="text-gray-700 whitespace-pre-line">{analysis.analysis}</p>
+                <div className="bg-gray-50 p-4 rounded-lg border">
+                  <MarkdownRenderer
+                    content={analysis.analysis}
+                    variant="medical"
+                    className="text-gray-700"
+                  />
+                </div>
               </div>
             </TabsContent>
             
