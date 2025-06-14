@@ -204,7 +204,7 @@ const Login: React.FC = () => {
     <Container>
       <Screen>
         <LogoContainer>
-          <Logo src="/src/pages/pnglogo copy.png" alt="Kabiraj AI Logo" />
+          <Logo src="/logo.png" alt="Kabiraj AI Logo" />
         </LogoContainer>
         <Title>Welcome to<br/>Kabiraj AI</Title>
         <Subtitle>Sign in to continue</Subtitle>
