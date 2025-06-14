@@ -7,50 +7,51 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "next-themes";
 import { createGlobalStyle } from 'styled-components';
 import { checkAndClearOldVersionLocalStorage } from "./utils/localStorageUtils"; // Import the version checker
+import { lazy, Suspense } from 'react'; // Import lazy and Suspense
 
 // Error Boundary Components
 import ErrorBoundary from "./components/ErrorBoundary";
-import PageErrorBoundary from "./components/PageErrorBoundary";
+// import PageErrorBoundary from "./components/PageErrorBoundary"; // Assuming this might be used differently or within lazy pages
 
 // Auth Pages
-import SplashScreen from "./pages/auth/SplashScreen";
-import Login from "./pages/auth/Login";
-import SignUp from "./pages/auth/Signup";
-import ForgotPassword from "./pages/auth/ForgotPassword";
+const SplashScreen = lazy(() => import("./pages/auth/SplashScreen"));
+const Login = lazy(() => import("./pages/auth/Login"));
+const SignUp = lazy(() => import("./pages/auth/Signup"));
+const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
 
 // Pages
-import NotFound from "./pages/NotFound";
-import PatientDashboard from "./pages/patient/Dashboard";
-import DoctorDashboard from "./pages/doctor/Dashboard";
+const NotFound = lazy(() => import("./pages/NotFound"));
+const PatientDashboard = lazy(() => import("./pages/patient/Dashboard"));
+const DoctorDashboard = lazy(() => import("./pages/doctor/Dashboard"));
 
 // Patient Pages
-import PatientVitals from "./pages/patient/Vitals";
-import PatientFindDoctor from "./pages/patient/FindDoctor";
-import PatientAppointments from "./pages/patient/Appointments";
-import PatientProfile from "./pages/patient/Profile";
-import DoctorProfile from "./pages/patient/DoctorProfile";
-import MedicationReminders from "./pages/patient/MedicationReminders";
-import PatientAIChatFirebase from "./pages/patient/PatientAIChatFirebase";
-import FirebaseTestComponent from "./components/FirebaseTestComponent";
-const PatientAIChat = PatientAIChatFirebase; // Use Firebase version
-import AiAssistant from "./pages/patient/AiAssistant";
-import DoctorPatientChat from "./pages/patient/DoctorPatientChat";
-import PatientChat from "./pages/patient/Chat";
-import BookAppointment from "./pages/patient/BookAppointment";
+const PatientVitals = lazy(() => import("./pages/patient/Vitals"));
+const PatientFindDoctor = lazy(() => import("./pages/patient/FindDoctor"));
+const PatientAppointments = lazy(() => import("./pages/patient/Appointments"));
+const PatientProfile = lazy(() => import("./pages/patient/Profile"));
+const DoctorProfile = lazy(() => import("./pages/patient/DoctorProfile")); // Patient view of Doctor Profile
+const MedicationReminders = lazy(() => import("./pages/patient/MedicationReminders"));
+const PatientAIChatFirebase = lazy(() => import("./pages/patient/PatientAIChatFirebase"));
+const FirebaseTestComponent = lazy(() => import("./components/FirebaseTestComponent"));
+const PatientAIChat = PatientAIChatFirebase; // Use Firebase version (already lazy)
+const AiAssistant = lazy(() => import("./pages/patient/AiAssistant"));
+const DoctorPatientChat = lazy(() => import("./pages/patient/DoctorPatientChat"));
+const PatientChat = lazy(() => import("./pages/patient/Chat"));
+const BookAppointment = lazy(() => import("./pages/patient/BookAppointment"));
 
 // Doctor Pages
-import DoctorAppointments from "./pages/doctor/Appointments";
-import DiagnosisEngine from "./pages/doctor/DiagnosisEngine";
-import ChatRooms from "./pages/doctor/ChatRooms";
-import DoctorChat from "./pages/doctor/DoctorChat";
-import DoctorProfilePage from "./pages/doctor/Profile";
-import DoctorAnalytics from "./pages/doctor/Analytics";
+const DoctorAppointments = lazy(() => import("./pages/doctor/Appointments"));
+const DiagnosisEngine = lazy(() => import("./pages/doctor/DiagnosisEngine"));
+const ChatRooms = lazy(() => import("./pages/doctor/ChatRooms"));
+const DoctorChat = lazy(() => import("./pages/doctor/DoctorChat"));
+const DoctorProfilePage = lazy(() => import("./pages/doctor/Profile")); // Doctor's own profile page
+const DoctorAnalytics = lazy(() => import("./pages/doctor/Analytics"));
 
 // Admin Pages
-import DatabaseSetup from "./pages/admin/DatabaseSetup";
+const DatabaseSetup = lazy(() => import("./pages/admin/DatabaseSetup"));
 
 // Shared Pages
-import SharedReport from "./pages/SharedReport";
+const SharedReport = lazy(() => import("./pages/SharedReport"));
 
 // Import test utilities for debugging
 import "./utils/testAuth";
@@ -99,9 +100,10 @@ function AppContent() {
   return (
     <>
       <GlobalStyle />
-      <Routes>
-        {/* Auth routes */}
-        <Route path="/" element={<SplashScreen />} />
+      <Suspense fallback={<div className="flex h-screen items-center justify-center text-xl font-semibold">Loading page...</div>}>
+        <Routes>
+          {/* Auth routes */}
+          <Route path="/" element={<SplashScreen />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />

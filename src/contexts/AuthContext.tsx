@@ -114,74 +114,105 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialize auth state
   useEffect(() => {
     let isMounted = true;
+    setIsLoading(true); // Ensure isLoading is true at the start of initial auth check/setup
 
     const handleSessionRecovery = async (message: string) => {
       if (!isMounted) return;
       toast.error(message);
-      await supabase.auth.signOut(); // This should trigger onAuthStateChange for cleanup
-      // Explicit cleanup as a fallback or for immediate effect:
+      // No need to call signOut here if onAuthStateChange handles SIGNED_OUT correctly,
+      // but if called directly (e.g. getSession error), it's a good measure.
+      // However, signOut itself triggers onAuthStateChange. Let's simplify.
+      // The primary goal here is to reset state and navigate.
+      // If signOut is called, it will lead to onAuthStateChange SIGNED_OUT path.
+
+      // If recovery is due to a failed getSession, signOut might be needed to clear Supabase state.
+      // Let's assume signOut is necessary if we are in a truly unknown state.
+      await supabase.auth.signOut();
+
       setUser(null);
       setSession(null);
-      setIsLoading(false);
-      if (isMounted) navigate('/login'); // Ensure navigation happens
+      setIsLoading(false); // Crucial: ensure loading is false
+      if (isMounted && window.location.pathname !== '/login') navigate('/login');
     };
 
     const handleAndValidateSession = async (currentSession: Session | null) => {
       if (!isMounted) return;
 
-      setSession(currentSession);
+      setSession(currentSession); // Update session state irrespective of user presence
 
       if (currentSession?.user) {
-        setIsLoading(true); // Set loading true before fetching profile
+        // setIsLoading(true); // Caller (initial useEffect or onAuthStateChange) now sets this
         try {
           const userProfile = await fetchUserProfile(currentSession.user.id, currentSession);
           if (isMounted) {
             setUser(userProfile);
-            setIsLoading(false);
           }
         } catch (error: any) {
-          console.error("Session validation: Failed to fetch profile:", error.message);
+          console.error("AuthContext: Failed to fetch profile during session validation:", error.message);
           if (isMounted) {
-            // If profile fetch fails, session might be problematic. Trigger recovery.
-            await handleSessionRecovery("Your session was invalid or expired. Please log in again.");
+            // This recovery path will call setIsLoading(false)
+            await handleSessionRecovery("Your session may be invalid. Please log in again.");
+          }
+        } finally {
+          if (isMounted) {
+            // This ensures isLoading is false if we attempted to fetch a profile.
+            // If handleSessionRecovery was called, it also sets isLoading to false.
+            setIsLoading(false);
           }
         }
       } else {
-        // No active session or user object within session
+        // No user in session, or session is null
         if (isMounted) {
           setUser(null);
-          setIsLoading(false);
+          setIsLoading(false); // Directly set loading false
         }
       }
     };
 
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (isMounted) {
-        handleAndValidateSession(session);
-      }
-    }).catch(error => {
-      console.error("Error getting initial session:", error);
-      if (isMounted) {
-        handleSessionRecovery("Could not retrieve session. Please try logging in.");
-      }
-    });
+    // setIsLoading(true) was already called at the start of useEffect.
+    supabase.auth.getSession()
+      .then(({ data: { session: initialSession } }) => {
+        if (isMounted) {
+          // handleAndValidateSession will be responsible for setting isLoading(false)
+          return handleAndValidateSession(initialSession);
+        }
+      })
+      .catch(error => {
+        console.error("AuthContext: Error getting initial session:", error);
+        if (isMounted) {
+          // handleSessionRecovery will be responsible for setting isLoading(false)
+          return handleSessionRecovery("Could not retrieve your session. Please try logging in.");
+        }
+      });
+      // No .finally() here for setIsLoading(false), as the .then() and .catch() paths
+      // call functions that are now responsible for it.
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event, newSession) => { // Renamed session to newSession for clarity
         if (!isMounted) return;
-        console.log("Auth event:", event, "Session:", session);
+        console.log("AuthContext: Auth event:", event, newSession);
+
+        setIsLoading(true); // Set loading true before processing any auth state change
+                            // This is important for onAuthStateChange events after initial load.
 
         if (event === 'SIGNED_OUT') {
           setUser(null);
-          setSession(null); // Explicitly clear session state
-          setIsLoading(false);
-          // Navigation to /login is handled by another useEffect watching `user`
-          // or directly in signOut function.
-        } else {
+          setSession(null);
+          setIsLoading(false); // Explicitly set here for SIGNED_OUT
+        } else if (event === 'INITIAL_SESSION') {
+          // This event is part of the initial getSession flow if enabled.
+          // handleAndValidateSession will manage isLoading.
+          // If getSession().then() already called handleAndValidateSession, this might be redundant
+          // or provide the same session. Supabase client behavior can vary.
+          // We ensure handleAndValidateSession is robust to being called with the same session.
+          await handleAndValidateSession(newSession);
+        }
+        else {
           // For SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED, PASSWORD_RECOVERY, etc.
-          await handleAndValidateSession(session);
+          // handleAndValidateSession is responsible for setting setIsLoading(false)
+          await handleAndValidateSession(newSession);
         }
       }
     );

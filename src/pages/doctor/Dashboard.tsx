@@ -150,36 +150,46 @@ export default function DoctorDashboard() {
         setTodayAppointments(formatAppointments(todayData));
         setUpcomingAppointments(formatAppointments(upcomingData));
 
-        // Calculate weekly stats (appointments count for last 7 days)
-        const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        // Calculate weekly stats (appointments count for last 7 days) - OPTIMIZED
         const today = new Date();
-        const weekStats = [];
+        const sevenDaysAgo = new Date();
+        sevenDaysAgo.setDate(today.getDate() - 6); // 6 days ago to include today in a 7-day window
 
+        const sevenDaysAgoString = sevenDaysAgo.toISOString().split('T')[0];
+        const todayString = today.toISOString().split('T')[0];
+
+        const { data: weeklyAppointmentData, error: weeklyError } = await supabase
+          .from('appointments')
+          .select('appointment_date, id') // Select only necessary fields
+          .eq('doctor_id', user.id)
+          .gte('appointment_date', sevenDaysAgoString)
+          .lte('appointment_date', todayString);
+
+        if (weeklyError) throw weeklyError;
+
+        const countsByDate: { [key: string]: number } = {};
+        if (weeklyAppointmentData) {
+          for (const appt of weeklyAppointmentData) {
+            countsByDate[appt.appointment_date] = (countsByDate[appt.appointment_date] || 0) + 1;
+          }
+        }
+
+        const daysOfWeek = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        const newWeeklyStats = [];
         for (let i = 6; i >= 0; i--) {
           const date = new Date();
           date.setDate(today.getDate() - i);
-          const dayName = days[date.getDay()];
           const dateString = date.toISOString().split('T')[0];
-
-          // Fetch count of appointments for this day
-          const { count, error: countError } = await supabase
-            .from('appointments')
-            .select('*', { count: 'exact', head: true })
-            .eq('doctor_id', user.id)
-            .eq('appointment_date', dateString);
-
-          if (countError) throw countError;
-
-          weekStats.push({
+          const dayName = daysOfWeek[date.getDay()];
+          newWeeklyStats.push({
             day: dayName,
-            patients: count || 0
+            patients: countsByDate[dateString] || 0,
           });
         }
-
-        setWeeklyStats(weekStats);
+        setWeeklyStats(newWeeklyStats);
 
         // Get total unique patients
-        const { count: patientCount, error: countError } = await supabase
+        const { count: patientCount, error: totalPatientsError } = await supabase
           .from('appointments')
           .select('patient_id', { count: 'exact', head: true })
           .eq('doctor_id', user.id);

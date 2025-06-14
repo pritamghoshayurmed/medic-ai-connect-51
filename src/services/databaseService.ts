@@ -47,6 +47,56 @@ export class DatabaseService {
     }
   }
 
+  static async getLimitedDoctors(limit: number = 3): Promise<Doctor[]> { // Default to 3 as per dashboard
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select(`
+          id,
+          full_name,
+          email,
+          phone,
+          avatar_url,
+          doctor_profiles (
+            qualification,
+            experience_years,
+            rating
+          )
+        `)
+        .eq('role', 'doctor')
+        .order('full_name', { ascending: true }) // Simple ordering for consistency
+        .limit(limit);
+
+      if (error) {
+        console.error('Error fetching limited doctors:', error);
+        return [];
+      }
+
+      return data.map(profile => {
+        const doctorProfile = profile.doctor_profiles as DoctorProfileRow | null; // doctor_profiles can be null if no entry
+
+        return {
+          id: profile.id,
+          name: profile.full_name || 'N/A',
+          email: profile.email || '',
+          phone: profile.phone || '',
+          profilePic: profile.avatar_url || undefined,
+          role: 'doctor' as const,
+          specialty: doctorProfile?.qualification || 'General Practitioner',
+          experience: doctorProfile?.experience_years || 0,
+          rating: doctorProfile?.rating || 0,
+          // Fields not fetched for limited view, can be defaulted or omitted
+          availableDays: [],
+          availableHours: {},
+          consultationFee: 0
+        };
+      });
+    } catch (error) {
+      console.error('Error in getLimitedDoctors:', error);
+      return [];
+    }
+  }
+
   static async updateUserProfile(userId: string, updates: Partial<User>): Promise<boolean> {
     try {
       const { error } = await supabase
@@ -128,15 +178,16 @@ export class DatabaseService {
       }
 
       return data.map(profile => {
-        const doctorProfile = profile.doctor_profiles as DoctorProfileRow;
+        const doctorProfile = profile.doctor_profiles as DoctorProfileRow | null;
         
         return {
           id: profile.id,
-          name: profile.full_name,
-          email: profile.email,
+          name: profile.full_name || 'N/A',
+          email: profile.email || '',
           phone: profile.phone || '',
+          profilePic: profile.avatar_url || undefined,
           role: 'doctor' as const,
-          specialty: doctorProfile?.qualification || '',
+          specialty: doctorProfile?.qualification || 'General Practitioner',
           experience: doctorProfile?.experience_years || 0,
           rating: doctorProfile?.rating || 0,
           availableDays: doctorProfile?.available_days || [],
