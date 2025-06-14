@@ -630,7 +630,6 @@ export default function DiagnosisEngine() {
             </Card>
             
             <ImageUploader 
-              key={`uploader-${Date.now()}`} 
               onUpload={handleFileSelect} 
               isLoading={isAnalyzing} 
             />
