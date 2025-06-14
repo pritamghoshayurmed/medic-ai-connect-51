@@ -6,6 +6,7 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { ThemeProvider } from "next-themes";
 import { createGlobalStyle } from 'styled-components';
+import { checkAndClearOldVersionLocalStorage } from "./utils/localStorageUtils"; // Import the version checker
 
 // Error Boundary Components
 import ErrorBoundary from "./components/ErrorBoundary";
@@ -301,10 +302,13 @@ function AppContent() {
   );
 }
 
-const App = () => (
-  <ErrorBoundary>
-    <ThemeProvider attribute="class" defaultTheme="light">
-      <QueryClientProvider client={queryClient}>
+const App = () => {
+  checkAndClearOldVersionLocalStorage(); // Call the version checker early
+
+  return (
+    <ErrorBoundary>
+      <ThemeProvider attribute="class" defaultTheme="light">
+        <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <TooltipProvider>
             <AppContent />
@@ -313,6 +317,7 @@ const App = () => (
       </QueryClientProvider>
     </ThemeProvider>
   </ErrorBoundary>
-);
+  );
+}; // Added closing brace and semicolon for the App arrow function
 
 export default App;
