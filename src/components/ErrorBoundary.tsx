@@ -1,92 +1,45 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
-import { AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 
 interface Props {
   children: ReactNode;
-  fallback?: ReactNode;
 }
 
 interface State {
   hasError: boolean;
-  error: Error | null;
-  errorInfo: ErrorInfo | null;
+  error?: Error; // Optional: store the error if needed for display
 }
 
 class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
-    super(props);
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null
-    };
-  }
-
-  static getDerivedStateFromError(error: Error): State {
-    // Update state so the next render will show the fallback UI.
-    return { hasError: true, error, errorInfo: null };
-  }
-
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
-    // Log the error to an error reporting service
-    console.error('ErrorBoundary caught an error', error, errorInfo);
-    this.setState({
-      error,
-      errorInfo
-    });
-  }
-
-  resetError = (): void => {
-    this.setState({
-      hasError: false,
-      error: null,
-      errorInfo: null
-    });
+  public state: State = {
+    hasError: false,
   };
 
-  render(): ReactNode {
-    if (this.state.hasError) {
-      // Custom fallback UI
-      if (this.props.fallback) {
-        return this.props.fallback;
-      }
+  public static getDerivedStateFromError(error: Error): State {
+    // Update state so the next render will show the fallback UI.
+    return { hasError: true, error };
+  }
 
-      // Default error UI
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error("Uncaught error:", error, errorInfo);
+    // You could also log the error to an error reporting service here
+  }
+
+  public render() {
+    if (this.state.hasError) {
       return (
-        <Card className="my-4">
-          <CardHeader className="bg-red-50 text-red-700 flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5" />
-            <h3 className="text-lg font-medium">Something went wrong</h3>
-          </CardHeader>
-          <CardContent className="p-4">
-            <div className="text-sm text-gray-600 mb-2">
-              {this.state.error && this.state.error.toString()}
-            </div>
-            <details className="text-xs text-gray-500 mt-2">
-              <summary>Error details</summary>
-              <pre className="mt-2 max-h-40 overflow-auto p-2 bg-gray-100 rounded text-xs">
-                {this.state.errorInfo && this.state.errorInfo.componentStack}
-              </pre>
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <h1>Something went wrong.</h1>
+          <p>We're sorry for the inconvenience. Please try refreshing the page.</p>
+          {/* Optional: Display more error details in development */}
+          {process.env.NODE_ENV === 'development' && this.state.error && (
+            <details style={{ marginTop: '20px', whiteSpace: 'pre-wrap' }}>
+              <summary>Error Details (Development Only)</summary>
+              {this.state.error.toString()}
+              <br />
+              {this.state.error.stack}
             </details>
-          </CardContent>
-          <CardFooter className="bg-gray-50 p-3">
-            <Button
-              variant="outline"
-              onClick={this.resetError}
-              className="mr-2"
-            >
-              Try Again
-            </Button>
-            <Button
-              variant="default"
-              onClick={() => window.location.href = '/'}
-            >
-              Go to Home
-            </Button>
-          </CardFooter>
-        </Card>
+          )}
+        </div>
       );
     }
 
@@ -94,4 +47,4 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-export default ErrorBoundary; 
+export default ErrorBoundary;
