@@ -298,6 +298,7 @@ function AppContent() {
         {/* Catch-all route */}
         <Route path="*" element={<NotFound />} />
       </Routes>
+      </Suspense> {/* Correctly placed after Routes */}
       <Toaster />
       <Sonner />
     </>
