@@ -317,6 +317,7 @@ const App = () => {
       </QueryClientProvider>
     </ThemeProvider>
   </ErrorBoundary>
-);
+  );
+}; // Added closing brace and semicolon for the App arrow function
 
 export default App;
