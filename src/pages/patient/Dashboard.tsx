@@ -25,7 +25,7 @@ import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import BottomNavigation from "@/components/BottomNavigation";
 import styled from "styled-components";
-import { useAllDoctors, useAppointments } from "@/hooks/useDatabase";
+import { useLimitedDoctors } from "@/hooks/useDatabase"; // Removed useAppointments
 import { Doctor } from "@/types";
 
 // Styled components for the new design
@@ -452,15 +452,15 @@ export default function PatientDashboard() {
   const navigate = useNavigate();
 
   // Fetch real data from database
-  const { data: doctors = [], isLoading: doctorsLoading } = useAllDoctors();
-  const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments(user?.id, user?.role);
+  const { data: doctors = [], isLoading: doctorsLoading } = useLimitedDoctors(3); // Use useLimitedDoctors with a limit of 3
+  // const { data: appointments = [], isLoading: appointmentsLoading } = useAppointments(user?.id, user?.role); // Removed
 
   const [vitals, setVitals] = useState({
     heartRate: 76,
     bloodPressure: "120/80",
   });
 
-  const loading = doctorsLoading || appointmentsLoading;
+  const loading = doctorsLoading; // Removed appointmentsLoading
 
   // Get user data from auth context
   const userData = {

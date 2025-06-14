@@ -8,7 +8,8 @@ export const queryKeys = {
   user: (id: string) => ['user', id],
   doctor: (id: string) => ['doctor', id],
   patient: (id: string) => ['patient', id],
-  doctors: () => ['doctors'],
+  doctors: () => ['doctors'], // For all doctors
+  limitedDoctors: (limit: number) => ['doctors', 'limited', limit], // For limited doctors
   appointments: (userId: string, role: UserRole) => ['appointments', userId, role],
   messages: (userId1: string, userId2: string) => ['messages', userId1, userId2],
   chatRooms: (userId: string) => ['chatRooms', userId],
@@ -59,6 +60,14 @@ export function useAllDoctors() {
     queryKey: queryKeys.doctors(),
     queryFn: DatabaseService.getAllDoctors,
     staleTime: 10 * 60 * 1000, // 10 minutes
+  });
+}
+
+export function useLimitedDoctors(limit: number = 3) { // Default to 3 as per dashboard
+  return useQuery({
+    queryKey: queryKeys.limitedDoctors(limit),
+    queryFn: () => DatabaseService.getLimitedDoctors(limit),
+    staleTime: 5 * 60 * 1000, // 5 minutes, can be adjusted
   });
 }
 
