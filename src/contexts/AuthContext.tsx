@@ -43,6 +43,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true); // Reverted: Initialize to true
+  const [explicitLoginInProgress, setExplicitLoginInProgress] = useState(false); // New state
   const [session, setSession] = useState<Session | null>(null);
   const { toast: uiToast } = useToast();
   const navigate = useNavigate();
@@ -132,22 +133,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const resolveInitialLoad = () => {
       if (isMounted) {
         clearTimeout(initialLoadTimeoutId);
-        setIsLoading(false);
+        // Only set isLoading to false if an explicit login is NOT in progress.
+        // The login function itself will handle setting isLoading to false.
+        if (!explicitLoginInProgress) {
+          setIsLoading(false);
+        }
       }
     };
 
     const handleSessionRecovery = async (message: string) => {
       if (!isMounted) {
+        // Still call resolveInitialLoad to clear timeout,
+        // respecting explicitLoginInProgress state.
         resolveInitialLoad();
         return;
       }
       toast.error(message);
-      await supabase.auth.signOut();
-      setUser(null);
-      setSession(null);
-      resolveInitialLoad();
+      await supabase.auth.signOut(); // This will trigger SIGNED_OUT event
+      // setUser(null) and setSession(null) will be handled by onAuthStateChange for SIGNED_OUT
+      // No need to call resolveInitialLoad here if SIGNED_OUT handler does it.
+      // However, to ensure isLoading is managed if SIGNED_OUT doesn't fire or is delayed:
+      if (isMounted && !explicitLoginInProgress) {
+         setIsLoading(false);
+      }
+      // Let onAuthStateChange handle navigation for SIGNED_OUT if possible,
+      // but navigate if still on a protected path.
       if (isMounted && window.location.pathname !== '/login') {
-          navigate('/login');
+        navigate('/login');
       }
     };
 
@@ -228,10 +240,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Loading for explicit login/signup/signout is handled within those functions.
 
         if (event === 'SIGNED_OUT') {
-          setIsLoading(true); // Explicitly set loading for the sign-out process
+          // The signOut function itself now handles setIsLoading.
+          // We ensure user state is cleared and resolveInitialLoad is called,
+          // which respects explicitLoginInProgress.
           setUser(null);
           setSession(null);
-          resolveInitialLoad(); // This will set isLoading back to false
+          resolveInitialLoad();
         } else {
           // For events like INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED:
           // Rely on the initial setIsLoading(true) in useEffect for page load.
@@ -267,6 +281,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string, role: UserRole) => {
+    setExplicitLoginInProgress(true); // Signal start of explicit login
     setIsLoading(true);
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
@@ -317,16 +332,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         // Navigation is handled by the useEffect watching `user` and `isLoading` state.
         // No need to call setIsLoading(false) here if onAuthStateChange's handler does it via resolveInitialLoad.
         // However, for a cleaner flow from login perspective:
+        setExplicitLoginInProgress(false); // Signal end of explicit login
         setIsLoading(false);
 
       } else {
+        // This case should ideally be covered by the main error or data.user/session check,
+        // but if it's reached, ensure states are reset.
+        await supabase.auth.signOut().catch(e => console.error("Error signing out during login cleanup:", e)); // Attempt to sign out
+        setUser(null);
+        setSession(null);
+        setExplicitLoginInProgress(false); // Signal end of explicit login
+        setIsLoading(false);
         throw new Error("Login successful, but no user or session data received from Supabase.");
       }
     } catch (error: any) {
       console.error("Login failed:", error);
       // Ensure user/session are cleared and loading is stopped on any login error
-      setUser(null);
-      setSession(null);
+      // signOut() might be too much if the error is, e.g., network before even hitting supabase.
+      // But if an auth attempt was made and failed, or profile check failed, user should be null.
+      // The role mismatch path already calls signOut.
+      // If error is from signInWithPassword itself, session/user should not have been set.
+      // If error is from profile fetch after signIn, signOut is called there.
+      setUser(null); // Ensure user is cleared
+      setSession(null); // Ensure session is cleared
+      setExplicitLoginInProgress(false); // Signal end of explicit login
       setIsLoading(false);
       uiToast({
         title: "Login failed",
@@ -395,6 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Error signing out:", error);
       toast.error('Failed to sign out');
     } finally {
+      setExplicitLoginInProgress(false); // Ensure this is reset on any sign out
       setIsLoading(false);
     }
   };
