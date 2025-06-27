@@ -156,26 +156,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resolveInitialLoad();
         return;
       }
-      setSession(currentSession);
-      if (currentSession?.user) {
-        try {
-          const userProfile = await fetchUserProfile(currentSession.user.id, currentSession);
-          if (isMounted) {
-            setUser(userProfile);
-          }
-        } catch (error: any) {
-          console.error("AuthContext: Profile fetch failed in handleAndValidateSession:", error.message);
-          if (isMounted) {
-            await handleSessionRecovery("Session invalid. Please log in again.");
-          }
-          return;
-        }
-      } else {
-        if (isMounted) {
-          setUser(null);
-        }
+      if (!isMounted) {
+        resolveInitialLoad(); // Ensure isLoading is false if component unmounted
+        return;
       }
-      resolveInitialLoad();
+
+      if (currentSession?.user) {
+        setSession(currentSession); // Set session immediately
+
+        // Create preliminary user object
+        const preliminaryUser: User = {
+          id: currentSession.user.id,
+          email: currentSession.user.email || 'N/A', // Email should exist
+          name: currentSession.user.email?.split('@')[0] || 'User', // Placeholder name
+          // role, phone, profilePic will be undefined initially due to User type change
+        };
+        setUser(preliminaryUser); // Set preliminary user data
+
+        // IMPORTANT: Resolve initial load *before* async profile fetch
+        // This makes the app responsive quickly with basic user info
+        resolveInitialLoad();
+
+        // Asynchronously fetch full user profile
+        fetchUserProfile(currentSession.user.id, currentSession)
+          .then(fullUserProfile => {
+            if (isMounted) {
+              setUser(fullUserProfile); // Update with full profile details
+            }
+          })
+          .catch(async (error) => { // Make catch async to use await inside
+            console.error("AuthContext: Background profile fetch failed after initial load:", error.message);
+            if (isMounted) {
+              // Decide if this error requires full logout or just leaves preliminary user
+              // For consistency with previous logic (profile fetch failure leads to logout):
+              await handleSessionRecovery("Session active, but full profile details could not be loaded. Please log in again.");
+            }
+          });
+      } else {
+        // No session or no user in session
+        setUser(null);
+        setSession(null);
+        resolveInitialLoad();
+      }
     };
 
     supabase.auth.getSession()
@@ -200,13 +222,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!isMounted) return;
         console.log("AuthContext: Auth event:", event, authChangeEventSession);
 
-        setIsLoading(true);
+        // setIsLoading(true) was removed here to prevent onAuthStateChange from
+        // re-triggering a loading state if getSession() path is already handling it
+        // or has just completed for the initial page load.
+        // Loading for explicit login/signup/signout is handled within those functions.
 
         if (event === 'SIGNED_OUT') {
+          setIsLoading(true); // Explicitly set loading for the sign-out process
           setUser(null);
           setSession(null);
-          resolveInitialLoad();
+          resolveInitialLoad(); // This will set isLoading back to false
         } else {
+          // For events like INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED:
+          // Rely on the initial setIsLoading(true) in useEffect for page load.
+          // handleAndValidateSession will update user/session and call resolveInitialLoad().
+          // If this event occurs after initial load (isLoading is false), this avoids
+          // showing a global loader for potentially quick background updates.
           await handleAndValidateSession(authChangeEventSession);
         }
       }
@@ -373,14 +404,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Add navigation effect when user state changes
   useEffect(() => {
-    if (user && !isLoading) {
+    // Only navigate if user exists, role is defined, and not currently loading
+    if (user && user.role && !isLoading) {
       const dashboardPath = user.role === "doctor" ? "/doctor" : "/patient";
-      // Only navigate if we're not already on the correct dashboard
+      // Only navigate if we're not already on or under the correct dashboard path
       if (!window.location.pathname.startsWith(dashboardPath)) {
-        navigate(dashboardPath);
+         // Avoid redirect loops from auth pages if role isn't loaded yet or if on splash
+        const isAuthPage = ['/login', '/signup', '/forgot-password'].includes(window.location.pathname);
+        const isSplashPage = window.location.pathname === '/';
+
+        if (!isAuthPage || isSplashPage) { // Navigate if not on an auth page, or if on splash page
+            console.log(`AuthContext: Navigating to ${dashboardPath} from ${window.location.pathname} for user ${user.id} with role ${user.role}`);
+            navigate(dashboardPath);
+        }
       }
     }
-  }, [user, isLoading, navigate]);
+  }, [user, user?.role, isLoading, navigate]); // Added user?.role to dependencies
 
   return (
     <AuthContext.Provider

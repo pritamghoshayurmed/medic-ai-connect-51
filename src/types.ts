@@ -2,13 +2,13 @@
 export type UserRole = "patient" | "doctor";
 
 export interface User {
-  full_name: string;
   id: string;
-  name: string;
   email: string;
-  phone: string;
-  role: UserRole;
+  name?: string;         // Populated from profile.full_name
+  phone?: string;
+  role?: UserRole;
   profilePic?: string;
+  full_name?: string;   // Potentially redundant with name, review usage
 }
 
 export interface Doctor extends User {
