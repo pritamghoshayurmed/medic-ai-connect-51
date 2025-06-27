@@ -155,16 +155,24 @@ const Login: React.FC = () => {
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
-      toast({
-        title: "Already logged in",
-        description: "Redirecting to your dashboard...",
-      });
-      
-      const dashboardPath = user.role === "doctor" ? "/doctor" : "/patient";
-      navigate(dashboardPath);
+    // Only redirect if auth is not loading and user is confirmed
+    if (user && !authLoading) {
+      // Ensure user.role is available before navigating
+      if (user.role) {
+        toast({
+          title: "Already logged in",
+          description: "Redirecting to your dashboard...",
+        });
+
+        const dashboardPath = user.role === "doctor" ? "/doctor" : "/patient";
+        navigate(dashboardPath);
+      } else {
+        // This case might happen if user is set but role is not yet populated
+        // (e.g. preliminary user object). Avoid redirecting.
+        console.log("Login page: User object exists but role is not yet defined. Waiting for role.");
+      }
     }
-  }, [user, navigate, toast]);
+  }, [user, authLoading, navigate, toast]);
 
   const handleRoleSelect = (role: 'patient' | 'doctor') => {
     setSelectedRole(role);
