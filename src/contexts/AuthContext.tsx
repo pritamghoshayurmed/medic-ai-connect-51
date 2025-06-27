@@ -95,11 +95,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .select('*')
             .eq('id', userId)
             .single();
+          // If patient profile is not found, just log a warning.
+          // Profile creation should be handled elsewhere (e.g., during signup or a dedicated profile setup step).
           if (!patientProfile) {
-            console.warn('Patient profile not found, creating one...');
-            await supabase.from('patient_profiles').insert({
-              id: userId, blood_type: null, allergies: [], chronic_conditions: []
-            });
+            console.warn(`Patient profile not found for user ${userId}. Consider creating one if needed.`);
           }
         }
       } catch (roleError) {
@@ -116,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let isMounted = true;
     setIsLoading(true);
 
-    const TIMEOUT_DURATION = 7000; // 7 seconds
+    const TIMEOUT_DURATION = 12000; // 12 seconds
     let initialLoadTimeoutId = setTimeout(() => {
       if (isMounted && isLoading) {
         console.warn(`AuthContext: Initial session processing timed out after ${TIMEOUT_DURATION}ms. Forcing UI unlock.`);
@@ -248,35 +247,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error;
       }
 
-      if (data.user) {
-        // Verify user role matches selected role
-        const { data: profile, error: profileError } = await supabase
+      if (data.user && data.session) {
+        // Verify user role matches selected role and fetch basic profile data
+        const { data: profileData, error: profileError } = await supabase
           .from('profiles')
-          .select('role')
+          .select('*') // Fetch all columns from profiles table
           .eq('id', data.user.id)
           .single();
 
         if (profileError) {
-          throw new Error('Failed to verify user role');
+          await supabase.auth.signOut(); // Sign out if profile can't be fetched
+          console.error("Login error: Failed to fetch user profile.", profileError);
+          throw new Error('Failed to fetch user profile. Please ensure your profile is set up.');
         }
 
-        if (profile.role !== role) {
+        if (profileData.role !== role) {
           await supabase.auth.signOut();
-          throw new Error(`Please login as a ${profile.role}`);
+          throw new Error(`Role mismatch. Please login as a ${profileData.role}.`);
         }
 
-        // Navigation will be handled by the auth state change listener
+        const loggedInUser: User = {
+          id: data.user.id,
+          name: profileData.full_name,
+          email: data.user.email!,
+          phone: profileData.phone || '',
+          role: profileData.role as UserRole,
+          profilePic: profileData.profile_pic_url || undefined, // Assuming a column name like profile_pic_url
+        };
+
+        setUser(loggedInUser);
+        setSession(data.session);
+        // `onAuthStateChange` will still fire and call `handleAndValidateSession`.
+        // `handleAndValidateSession` will then call `fetchUserProfile` which might fetch more details (e.g., patient/doctor specific tables).
+        // This is acceptable as `fetchUserProfile` is the canonical source for the full User object.
+        // The direct setUser here provides a quicker initial state update.
+
         toast.success('Login successful!');
+        // Navigation is handled by the useEffect watching `user` and `isLoading` state.
+        // No need to call setIsLoading(false) here if onAuthStateChange's handler does it via resolveInitialLoad.
+        // However, for a cleaner flow from login perspective:
+        setIsLoading(false);
+
+      } else {
+        throw new Error("Login successful, but no user or session data received from Supabase.");
       }
     } catch (error: any) {
       console.error("Login failed:", error);
+      // Ensure user/session are cleared and loading is stopped on any login error
+      setUser(null);
+      setSession(null);
+      setIsLoading(false);
       uiToast({
         title: "Login failed",
-        description: error.message || "Please check your credentials and try again",
+        description: error.message || "Please check your credentials and try again.",
         variant: "destructive",
       });
-      setIsLoading(false);
-      throw error;
+      throw error; // Re-throw for the calling component (e.g., Login.tsx)
     }
   };
 
