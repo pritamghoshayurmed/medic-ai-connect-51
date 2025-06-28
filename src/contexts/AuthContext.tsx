@@ -213,17 +213,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     supabase.auth.getSession()
-      .then(({ data: { session: initialSession } }) => {
-        if (isMounted) {
-          handleAndValidateSession(initialSession);
+      .then(async ({ data: { session: initialSession } }) => {
+        if (!isMounted) {
+          resolveInitialLoad(); // For unmounted component
+          return;
+        }
+
+        if (initialSession) {
+          console.log("AuthContext: Existing session found on initial load. Signing out to enforce manual login.");
+          // Calling signOut here will trigger the onAuthStateChange 'SIGNED_OUT' event.
+          // That event handler will set user/session to null and call resolveInitialLoad().
+          await supabase.auth.signOut();
+          // To be absolutely sure state is cleared immediately if onAuthStateChange is slow or fails:
+          if (isMounted) {
+            setUser(null);
+            setSession(null);
+            // If explicitLoginInProgress was somehow true, reset it.
+            if (explicitLoginInProgress) setExplicitLoginInProgress(false);
+            // resolveInitialLoad will be called by SIGNED_OUT, but if not, this is a fallback.
+            // However, signOut() itself has a finally block that sets isLoading(false).
+            // The SIGNED_OUT event handler also calls resolveInitialLoad().
+            // To avoid multiple calls or race conditions, rely on onAuthStateChange for SIGNED_OUT.
+            // If we call resolveInitialLoad() here, ensure it's safe.
+            // For now, let onAuthStateChange handle it to keep logic centralized for SIGNED_OUT.
+          }
         } else {
-          resolveInitialLoad();
+          // No initial session, so user is null.
+          setUser(null);
+          setSession(null);
+          if (explicitLoginInProgress) setExplicitLoginInProgress(false); // Should be false here anyway
+          resolveInitialLoad(); // Call this to set isLoading = false.
         }
       })
       .catch(error => {
-        console.error("AuthContext: Error in getSession:", error);
+        console.error("AuthContext: Error in getSession or during initial forced signOut:", error);
         if (isMounted) {
-          handleSessionRecovery("Could not retrieve session.");
+          setUser(null);
+          setSession(null);
+          if (explicitLoginInProgress) setExplicitLoginInProgress(false);
+          resolveInitialLoad();
         } else {
           resolveInitialLoad();
         }
@@ -245,15 +273,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // which respects explicitLoginInProgress.
           setUser(null);
           setSession(null);
+          if (explicitLoginInProgress) setExplicitLoginInProgress(false); // Reset if sign out interrupted login
           resolveInitialLoad();
-        } else {
-          // For events like INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED:
-          // Rely on the initial setIsLoading(true) in useEffect for page load.
-          // handleAndValidateSession will update user/session and call resolveInitialLoad().
-          // If this event occurs after initial load (isLoading is false), this avoids
-          // showing a global loader for potentially quick background updates.
+        } else if (event === 'SIGNED_IN') {
+          // This event occurs after a successful manual login via the login() function.
+          // login() itself sets explicitLoginInProgress=true and isLoading=true.
+          // handleAndValidateSession will fetch profile, set user, and then resolveInitialLoad()
+          // will correctly set isLoading=false because explicitLoginInProgress is true.
+          if (!isLoading && !explicitLoginInProgress) {
+            // This case implies a SIGNED_IN event not directly from our login() flow,
+            // which should ideally not happen if we always sign out initial sessions.
+            // However, to be safe, set loading.
+            console.warn("AuthContext: SIGNED_IN event occurred outside explicit login flow. Proceeding with validation.");
+            setIsLoading(true);
+          }
           await handleAndValidateSession(authChangeEventSession);
+        } else if (user && authChangeEventSession && (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+          // Only process token refreshes or user updates if there's an active, manually logged-in user.
+          // Set isLoading to true for these operations if not already set.
+          // The explicitLoginInProgress flag should be false here.
+          if (!isLoading) setIsLoading(true);
+          await handleAndValidateSession(authChangeEventSession);
+        } else if (!user && (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+          // A token was refreshed or user updated for a session we are intentionally ignoring (no active user).
+          console.log(`AuthContext: Event '${event}' for session '${authChangeEventSession?.user?.id}' received, but no active user. Data will be ignored.`);
+          // Ensure isLoading is false if this was the only pending auth operation.
+          // This path should not set the user.
+          if (isLoading && !explicitLoginInProgress) { // Check explicitLoginInProgress to be safe
+            resolveInitialLoad(); // which will set isLoading to false if not in explicit login
+          }
         }
+        // INITIAL_SESSION event is effectively handled by the getSession() logic at startup.
+        // Any other events are ignored if they don't match above.
       }
     );
 
