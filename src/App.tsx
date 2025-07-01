@@ -38,6 +38,8 @@ const AiAssistant = lazy(() => import("./pages/patient/AiAssistant"));
 const DoctorPatientChat = lazy(() => import("./pages/patient/DoctorPatientChat"));
 const PatientChat = lazy(() => import("./pages/patient/Chat"));
 const BookAppointment = lazy(() => import("./pages/patient/BookAppointment"));
+const ArticlesList = lazy(() => import("./pages/patient/ArticlesList"));
+const ArticleView = lazy(() => import("./pages/patient/ArticleView"));
 
 // Doctor Pages
 const DoctorAppointments = lazy(() => import("./pages/doctor/Appointments"));
@@ -219,6 +221,22 @@ function AppContent() {
           element={
             <ProtectedRoute allowedRoles={['patient']}>
               <PatientChat />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/articles"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <ArticlesList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/patient/articles/:slug"
+          element={
+            <ProtectedRoute allowedRoles={['patient']}>
+              <ArticleView />
             </ProtectedRoute>
           }
         />

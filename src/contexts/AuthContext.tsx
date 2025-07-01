@@ -161,6 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (isMounted && window.location.pathname !== '/login') {
         navigate('/login');
       }
+      // Ensure that isLoading is reset, even if navigation doesn't happen or other logic paths are taken.
+      // This is crucial if handleSessionRecovery is called from places that don't immediately unmount or stop execution.
+      resolveInitialLoad();
     };
 
     const handleAndValidateSession = async (currentSession: Session | null) => {
@@ -168,10 +171,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         resolveInitialLoad();
         return;
       }
-      if (!isMounted) {
-        resolveInitialLoad(); // Ensure isLoading is false if component unmounted
-        return;
-      }
+      // Removed redundant !isMounted check here
 
       if (currentSession?.user) {
         setSession(currentSession); // Set session immediately
@@ -185,25 +185,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         };
         setUser(preliminaryUser); // Set preliminary user data
 
-        // IMPORTANT: Resolve initial load *before* async profile fetch
-        // This makes the app responsive quickly with basic user info
+        // Asynchronously fetch full user profile
+        try {
+          const fullUserProfile = await fetchUserProfile(currentSession.user.id, currentSession);
+          if (isMounted) {
+            setUser(fullUserProfile); // Update with full profile details
+          }
+        } catch (error) {
+          console.error("AuthContext: Profile fetch failed during session validation:", error.message);
+          if (isMounted) {
+            // This error means we have a session but can't get the profile.
+            // This is critical, so proceed to logout.
+            await handleSessionRecovery(`Session error: Could not load user profile. Please log in again. Details: ${error.message}`);
+            // handleSessionRecovery calls resolveInitialLoad after clearing session
+            return; // Important to return here to prevent calling resolveInitialLoad again
+          }
+        }
+        // If profile fetch is successful or if an error occurred and was handled by handleSessionRecovery (which itself calls resolveInitialLoad),
+        // then resolve the initial load here.
+        // This ensures isLoading is false only after profile is fetched or session is definitively cleared.
         resolveInitialLoad();
 
-        // Asynchronously fetch full user profile
-        fetchUserProfile(currentSession.user.id, currentSession)
-          .then(fullUserProfile => {
-            if (isMounted) {
-              setUser(fullUserProfile); // Update with full profile details
-            }
-          })
-          .catch(async (error) => { // Make catch async to use await inside
-            console.error("AuthContext: Background profile fetch failed after initial load:", error.message);
-            if (isMounted) {
-              // Decide if this error requires full logout or just leaves preliminary user
-              // For consistency with previous logic (profile fetch failure leads to logout):
-              await handleSessionRecovery("Session active, but full profile details could not be loaded. Please log in again.");
-            }
-          });
       } else {
         // No session or no user in session
         setUser(null);
@@ -212,48 +214,64 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    supabase.auth.getSession()
-      .then(({ data: { session: initialSession } }) => {
+    const processSession = async () => {
+      try {
+        const { data: { session: initialSession }, error: getSessionError } = await supabase.auth.getSession();
+        if (getSessionError) {
+          console.error("AuthContext: Error in getSession:", getSessionError);
+          if (isMounted) {
+            await handleSessionRecovery("Could not retrieve current session.");
+          } else {
+            resolveInitialLoad(); // Still resolve if unmounted
+          }
+          return;
+        }
+
         if (isMounted) {
-          handleAndValidateSession(initialSession);
+          await handleAndValidateSession(initialSession);
+        } else {
+          resolveInitialLoad(); // Still resolve if unmounted
+        }
+      } catch (error) { // Catch any unexpected errors during processSession
+        console.error("AuthContext: Unexpected error in processSession:", error);
+        if (isMounted) {
+          await handleSessionRecovery("An unexpected error occurred while checking your session.");
         } else {
           resolveInitialLoad();
         }
-      })
-      .catch(error => {
-        console.error("AuthContext: Error in getSession:", error);
-        if (isMounted) {
-          handleSessionRecovery("Could not retrieve session.");
-        } else {
-          resolveInitialLoad();
-        }
-      });
+      }
+    };
+
+    processSession();
+
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, authChangeEventSession) => {
         if (!isMounted) return;
         console.log("AuthContext: Auth event:", event, authChangeEventSession);
 
-        // setIsLoading(true) was removed here to prevent onAuthStateChange from
-        // re-triggering a loading state if getSession() path is already handling it
-        // or has just completed for the initial page load.
-        // Loading for explicit login/signup/signout is handled within those functions.
-
+        // For SIGNED_OUT events, explicit signOut function handles setIsLoading.
+        // User/session are cleared, and resolveInitialLoad is called.
         if (event === 'SIGNED_OUT') {
-          // The signOut function itself now handles setIsLoading.
-          // We ensure user state is cleared and resolveInitialLoad is called,
-          // which respects explicitLoginInProgress.
           setUser(null);
           setSession(null);
-          resolveInitialLoad();
-        } else {
-          // For events like INITIAL_SESSION, SIGNED_IN, TOKEN_REFRESHED, USER_UPDATED:
-          // Rely on the initial setIsLoading(true) in useEffect for page load.
-          // handleAndValidateSession will update user/session and call resolveInitialLoad().
-          // If this event occurs after initial load (isLoading is false), this avoids
-          // showing a global loader for potentially quick background updates.
+          resolveInitialLoad(); // Ensure loading state is correctly managed
+        } else if (event === 'INITIAL_SESSION' && authChangeEventSession) {
+          // This event can sometimes fire after the initial getSession() call.
+          // We should re-validate this session.
+          console.log("AuthContext: Received INITIAL_SESSION event. Re-validating.");
+          await handleAndValidateSession(authChangeEventSession);
+        } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+          // For these events, the session has changed or user data might have.
+          // We need to re-validate and fetch profile.
+          // It's important that handleAndValidateSession itself manages isLoading correctly
+          // or calls resolveInitialLoad appropriately.
+           if (!explicitLoginInProgress) { // Only set loading if not part of an explicit login flow
+             setIsLoading(true); // Indicate processing for these background updates
+           }
           await handleAndValidateSession(authChangeEventSession);
         }
+        // No specific 'else' that calls resolveInitialLoad, as handleAndValidateSession or SIGNED_OUT path should do it.
       }
     );
 

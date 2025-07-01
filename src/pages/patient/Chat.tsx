@@ -2,7 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { doctorService } from "@/services/doctorService";
+import { firebaseChatService, ChatRoom as FirebaseChatRoom, FirebaseMessage } from "@/services/firebaseChatService";
+import { userMappingService } from "@/services/userMappingService";
+import { DoctorProfile } from "@/types"; // For doctor details
 import styled from "styled-components";
+import { formatDistanceToNow } from 'date-fns';
+
 import {
   ChevronLeft,
   Search,
@@ -13,7 +18,7 @@ import BottomNavigation from "@/components/BottomNavigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Styled components
+// Styled components (remain largely the same)
 const PageContainer = styled.div`
   background: linear-gradient(135deg, #004953 0%, #006064 50%, #00363a 100%);
   min-height: 100vh;
@@ -123,14 +128,8 @@ const TimeStamp = styled.span`
   margin-top: 5px;
 `;
 
-const OnlineBadge = styled.div`
-  width: 12px;
-  height: 12px;
-  background-color: #00C389;
-  border-radius: 50%;
-  margin-top: 5px;
-  margin-left: auto;
-`;
+// OnlineBadge might be removed or logic changed if not directly available from chat room
+// const OnlineBadge = styled.div`...`;
 
 const AICard = styled.div`
   background-color: rgba(255, 255, 255, 0.1);
@@ -223,72 +222,100 @@ const EmptyText = styled.p`
   margin-bottom: 20px;
 `;
 
-interface Doctor {
-  id: string;
-  name: string;
-  lastMessage: string;
-  timestamp: string;
-  online: boolean;
-  avatar?: string;
+// Enhanced structure for display
+interface DisplayChat {
+  doctorId: string; // Supabase ID of the doctor
+  doctorName: string;
+  doctorAvatar?: string;
+  lastMessageContent: string;
+  lastMessageTimestamp: string; // Formatted string
+  // online: boolean; // This might be harder to get accurately without presence system
+  unreadCount: number;
 }
 
 export default function Chat() {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user: patientUser } = useAuth(); // Renamed for clarity
   const [searchQuery, setSearchQuery] = useState("");
-  const [doctors, setDoctors] = useState<Doctor[]>([]);
-  const [filteredDoctors, setFilteredDoctors] = useState<Doctor[]>([]);
+  const [displayChats, setDisplayChats] = useState<DisplayChat[]>([]);
+  const [filteredChats, setFilteredChats] = useState<DisplayChat[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Load doctors from Supabase
   useEffect(() => {
-    const loadDoctors = async () => {
+    if (!patientUser) {
+      setLoading(false);
+      return;
+    }
+
+    const loadChatRooms = async () => {
       try {
         setLoading(true);
-        const doctorProfiles = await doctorService.getAllDoctors();
+        const patientFirebaseId = userMappingService.getFirebaseUserId(patientUser.id);
+        const chatRooms: FirebaseChatRoom[] = await firebaseChatService.getChatRooms(patientFirebaseId);
 
-        // Transform doctor profiles to chat format
-        const doctorChats: Doctor[] = doctorProfiles.map(doctor => ({
-          id: doctor.id,
-          name: doctor.full_name,
-          lastMessage: "Start a conversation with this doctor",
-          timestamp: "Available",
-          online: true, // For now, assume all doctors are online
-          avatar: undefined
-        }));
+        const processedChats: DisplayChat[] = await Promise.all(
+          chatRooms.map(async (room) => {
+            const doctorFirebaseId = room.participants.find(pId => pId !== patientFirebaseId);
+            if (!doctorFirebaseId) return null;
 
-        setDoctors(doctorChats);
-        setFilteredDoctors(doctorChats);
-        console.log(`Loaded ${doctorChats.length} doctors for chat`);
+            const doctorSupabaseId = userMappingService.getSupabaseUserId(doctorFirebaseId);
+            if (!doctorSupabaseId) return null;
+
+            const doctorProfile: DoctorProfile | null = await doctorService.getDoctorById(doctorSupabaseId);
+            if (!doctorProfile) return null;
+
+            const lastMessage = room.lastMessage;
+
+            return {
+              doctorId: doctorSupabaseId,
+              doctorName: doctorProfile.full_name || "Doctor",
+              doctorAvatar: undefined, // doctorProfile.profile_pic_url, // Assuming profile_pic_url exists
+              lastMessageContent: lastMessage?.content || "No messages yet.",
+              lastMessageTimestamp: lastMessage?.timestamp ? formatDistanceToNow(new Date(lastMessage.timestamp), { addSuffix: true }) : "N/A",
+              unreadCount: room.unreadCount?.[patientFirebaseId] || 0,
+            };
+          })
+        );
+
+        const validChats = processedChats.filter(chat => chat !== null) as DisplayChat[];
+        // Sort by lastActivity from room if available, otherwise by a default
+        // For now, FirebaseChatRoom doesn't explicitly sort by lastActivity in getChatRooms,
+        // but it's good practice if the service method did.
+        // Here, we can sort by timestamp of last message if needed, or rely on service's order.
+        setDisplayChats(validChats);
+        setFilteredChats(validChats);
+        console.log(`Loaded ${validChats.length} chat rooms`);
       } catch (error) {
-        console.error('Error loading doctors:', error);
+        console.error('Error loading chat rooms:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    loadDoctors();
-  }, []);
+    loadChatRooms();
+  }, [patientUser]);
   
-  // Filter doctors by search query
   useEffect(() => {
     if (searchQuery.trim() === "") {
-      setFilteredDoctors(doctors);
+      setFilteredChats(displayChats);
     } else {
-      const filtered = doctors.filter(doctor => 
-        doctor.name.toLowerCase().includes(searchQuery.toLowerCase())
+      const lowerQuery = searchQuery.toLowerCase();
+      const filtered = displayChats.filter(chat =>
+        chat.doctorName.toLowerCase().includes(lowerQuery) ||
+        chat.lastMessageContent.toLowerCase().includes(lowerQuery)
       );
-      setFilteredDoctors(filtered);
+      setFilteredChats(filtered);
     }
-  }, [searchQuery, doctors]);
+  }, [searchQuery, displayChats]);
   
   const handleNavigation = (tab: string) => {
     if (tab === "ai") {
       navigate('/patient/ai-chat');
     }
+    // "doctors" tab is the current view, no navigation needed.
   };
   
-  const handleDoctorSelect = (doctorId: string) => {
+  const handleDoctorChatSelect = (doctorId: string) => { // doctorId is Supabase ID
     navigate(`/patient/doctor-chat/${doctorId}`);
   };
 
@@ -327,7 +354,7 @@ export default function Chat() {
           </SearchIcon>
           <SearchInput
             type="text"
-            placeholder="Search doctors..."
+            placeholder="Search chats by doctor or message..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
@@ -348,28 +375,33 @@ export default function Chat() {
           <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
           </div>
-        ) : filteredDoctors.length > 0 ? (
-          filteredDoctors.map(doctor => (
+        ) : filteredChats.length > 0 ? (
+          filteredChats.map(chat => (
             <ChatCard
-              key={doctor.id}
-              onClick={() => handleDoctorSelect(doctor.id)}
+              key={chat.doctorId} // Use doctor's Supabase ID as key
+              onClick={() => handleDoctorChatSelect(chat.doctorId)}
             >
               <Avatar className="h-12 w-12">
                 <AvatarFallback className="bg-[#004953]/10 text-[#004953] border-[rgba(255,255,255,0.3)] border">
-                  {doctor.name.split(' ').map((n: string) => n[0]).join('')}
+                  {chat.doctorName.split(' ').map((n: string) => n[0]).join('')}
                 </AvatarFallback>
-                {doctor.avatar && (
-                  <AvatarImage src={doctor.avatar} alt={doctor.name} />
+                {chat.doctorAvatar && (
+                  <AvatarImage src={chat.doctorAvatar} alt={chat.doctorName} />
                 )}
               </Avatar>
 
               <DoctorInfo>
-                <DoctorName>{doctor.name}</DoctorName>
-                <LastMessage>{doctor.lastMessage}</LastMessage>
-                <TimeStamp>{doctor.timestamp}</TimeStamp>
+                <DoctorName>{chat.doctorName}</DoctorName>
+                <LastMessage>{chat.lastMessageContent}</LastMessage>
+                <TimeStamp>{chat.lastMessageTimestamp}</TimeStamp>
               </DoctorInfo>
-
-              {doctor.online && <OnlineBadge />}
+              {/* Display unread count if greater than 0 */}
+              {chat.unreadCount > 0 && (
+                <div className="ml-auto bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {chat.unreadCount}
+                </div>
+              )}
+              {/* OnlineBadge might be re-added if presence is implemented */}
             </ChatCard>
           ))
         ) : (
@@ -380,11 +412,11 @@ export default function Chat() {
             <EmptyTitle>No chats found</EmptyTitle>
             <EmptyText>
               {searchQuery ? 
-                "No doctors match your search criteria." : 
-                "You haven't chatted with any doctors yet."}
+                "No doctors or messages match your search." :
+                "You haven't started any conversations yet."}
             </EmptyText>
             <StartChatButton onClick={() => navigate('/patient/find-doctor')}>
-              Find a Doctor
+              Find a Doctor to Chat
             </StartChatButton>
           </EmptyState>
         )}
@@ -393,4 +425,4 @@ export default function Chat() {
       <BottomNavigation />
     </PageContainer>
   );
-} 
+}

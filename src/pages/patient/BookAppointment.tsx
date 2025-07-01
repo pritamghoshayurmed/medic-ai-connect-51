@@ -44,27 +44,71 @@ export default function BookAppointment() {
     "02:30 PM", "03:00 PM", "03:30 PM", "04:00 PM"
   ];
   
-  // Fetch doctor info
+import { doctorService } from "@/services/doctorService"; // Import doctorService
+
+interface Doctor {
+  id: string;
+  name: string;
+  specialty: string;
+  profilePic?: string;
+}
+
+export default function BookAppointment() {
+  const navigate = useNavigate();
+  const { id: doctorSupabaseId } = useParams<{ id: string }>(); // doctorSupabaseId from route
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Form state
+  const [doctor, setDoctor] = useState<Doctor | null>(null);
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [time, setTime] = useState<string>("");
+  const [reason, setReason] = useState<string>("");
+  const [appointmentType, setAppointmentType] = useState<"video" | "phone" | "in_person">("video");
+
+  // Available time slots
+  const availableTimeSlots = [
+    "09:00 AM", "09:30 AM", "10:00 AM", "10:30 AM",
+    "11:00 AM", "11:30 AM", "12:00 PM", "02:00 PM",
+    "02:30 PM", "03:00 PM", "03:30 PM", "04:00 PM"
+  ];
+
+  // Fetch doctor info using doctorService
   useEffect(() => {
-    const fetchDoctor = async () => {
+    if (!doctorSupabaseId) {
+      toast.error("Doctor ID is missing.");
+      setLoading(false);
+      navigate("/patient/find-doctor"); // Or some other appropriate page
+      return;
+    }
+
+    const fetchDoctorDetails = async () => {
       setLoading(true);
       try {
-        // Mock data for now, would normally fetch from API
-        setDoctor({
-          id: id || "1",
-          name: id === "1" ? "Dr. Priya Sharma" : id === "2" ? "Dr. Samridhya Dey" : "Dr. Koushik Das",
-          specialty: "General Practitioner"
-        });
+        const doctorProfile = await doctorService.getDoctorById(doctorSupabaseId);
+        if (doctorProfile) {
+          setDoctor({
+            id: doctorProfile.id,
+            name: doctorProfile.full_name,
+            specialty: doctorProfile.specialty?.name || "N/A", // Assuming specialty is an object with a name property
+            // profilePic: doctorProfile.profile_pic_url, // Uncomment if available
+          });
+        } else {
+          toast.error("Failed to load doctor information.");
+          navigate("/patient/find-doctor");
+        }
       } catch (error) {
         console.error("Error fetching doctor:", error);
-        toast.error("Failed to load doctor information");
+        toast.error("An error occurred while loading doctor information.");
+        navigate("/patient/find-doctor");
       } finally {
         setLoading(false);
       }
     };
     
-    fetchDoctor();
-  }, [id]);
+    fetchDoctorDetails();
+  }, [doctorSupabaseId, navigate]);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -79,61 +123,106 @@ export default function BookAppointment() {
       return;
     }
     
+import appointmentService from "@/services/appointmentService"; // Import appointmentService
+import { NewAppointment } from "@/types"; // Import NewAppointment type
+
+// ... (other imports and component code) ...
+
+export default function BookAppointment() {
+  // ... (hooks and state variables) ...
+  const navigate = useNavigate();
+  const { id: doctorSupabaseId } = useParams<{ id: string }>();
+  const { user: patientUser } = useAuth(); // Get the logged-in patient
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+
+  const [doctor, setDoctor] = useState<Doctor | null>(null); // Doctor here is simplified for display
+  const [date, setDate] = useState<Date | undefined>(new Date());
+  const [time, setTime] = useState<string>("");
+  const [reason, setReason] = useState<string>("");
+  const [appointmentType, setAppointmentType] = useState<"video" | "phone" | "in_person">("video");
+
+  // ... (useEffect for fetching doctor details remains the same) ...
+  useEffect(() => {
+    if (!doctorSupabaseId) {
+      toast.error("Doctor ID is missing.");
+      setLoading(false);
+      navigate("/patient/find-doctor");
+      return;
+    }
+
+    const fetchDoctorDetails = async () => {
+      setLoading(true);
+      try {
+        const doctorProfile = await doctorService.getDoctorById(doctorSupabaseId);
+        if (doctorProfile) {
+          setDoctor({
+            id: doctorProfile.id,
+            name: doctorProfile.full_name,
+            specialty: doctorProfile.specialty?.name || "N/A",
+          });
+        } else {
+          toast.error("Failed to load doctor information.");
+          navigate("/patient/find-doctor");
+        }
+      } catch (error) {
+        console.error("Error fetching doctor:", error);
+        toast.error("An error occurred while loading doctor information.");
+        navigate("/patient/find-doctor");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDoctorDetails();
+  }, [doctorSupabaseId, navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!doctor || !date || !time || !reason || !patientUser) {
+      toast.error("Please fill all required fields and ensure you are logged in.");
+      return;
+    }
+
+    if (submitting) {
+      console.log("Already submitting, preventing double submission");
+      return;
+    }
+
     setSubmitting(true);
     console.log("Booking appointment...");
     
+    const appointmentData: NewAppointment = {
+      patient_id: patientUser.id, // Logged-in patient's Supabase ID
+      doctor_id: doctor.id,       // Selected doctor's Supabase ID
+      appointment_date: format(date, "yyyy-MM-dd"), // Format date correctly
+      appointment_time: time,
+      reason: reason,
+      appointment_type: appointmentType,
+      status: 'pending', // Default status
+      // notes: "", // Optional: add if there's a field for patient notes
+      location: appointmentType === 'in_person' ? "Kabiraj Clinic (Default Location)" : undefined, // Example, make configurable if needed
+      meeting_link: appointmentType === 'video' ? `https://meet.kabiraj.com/appointment/${uuidv4()}` : undefined, // Example link
+    };
+      
     try {
-      // Create a new appointment object
-      const newAppointment: any = {
-        id: uuidv4(),
-        doctor: {
-          id: doctor.id,
-          full_name: doctor.name,
-          specialties: [doctor.specialty],
-          profile_pic: doctor.profilePic
-        },
-        specialties: [{ name: doctor.specialty }],
-        appointment_date: date.toISOString().split('T')[0],
-        appointment_time: time,
-        status: 'pending',
-        appointment_type: appointmentType,
-        notes: reason,
-        location: appointmentType === 'in_person' ? "City Hospital, Suite 100" : undefined,
-        meeting_link: appointmentType === 'video' ? "https://meet.google.com/xyz-abcd-123" : undefined
-      };
+      const createdAppointment = await appointmentService.createAppointment(appointmentData);
       
-      console.log("New appointment data:", newAppointment);
-      
-      // Store the appointment in localStorage
-      const existingAppointments = localStorage.getItem('bookedAppointments');
-      let appointmentsArray = [];
-      
-      if (existingAppointments) {
-        try {
-          appointmentsArray = JSON.parse(existingAppointments);
-        } catch (error) {
-          console.error("Error parsing stored appointments:", error);
-          appointmentsArray = [];
-        }
-      }
-      
-      appointmentsArray.push(newAppointment);
-      localStorage.setItem('bookedAppointments', JSON.stringify(appointmentsArray));
-      console.log("Appointment saved to localStorage");
-      
-      // Simulate API call
-      setTimeout(() => {
-        console.log("Booking complete, navigating to appointments page");
-        toast.success("Appointment booked successfully");
-        // Navigate to appointments page with state flag
+      if (createdAppointment) {
+        console.log("Appointment created successfully:", createdAppointment);
+        toast.success("Appointment booked successfully!");
         navigate("/patient/appointments", { 
-          state: { newAppointment: true }
+          state: { newAppointmentId: createdAppointment.id } // Pass ID for potential highlighting
         });
-        setSubmitting(false);
-      }, 1000);
-    } catch (error) {
+      } else {
+        // This case should ideally be covered by error throwing in service
+        toast.error("Failed to book appointment. Response was empty.");
+      }
+    } catch (error: any) {
       console.error("Error booking appointment:", error);
-      toast.error("Failed to book appointment");
+      toast.error(`Failed to book appointment: ${error.message || "Unknown error"}`);
+    } finally {
       setSubmitting(false);
     }
   };

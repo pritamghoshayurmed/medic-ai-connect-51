@@ -19,31 +19,14 @@ import {
   Plus,
   Search
 } from "lucide-react";
-import { format, addDays, isSameDay } from "date-fns";
-import { supabase } from "@/integrations/supabase/client";
+import { format, addDays, isSameDay, parseISO } from "date-fns"; // Added parseISO
+// import { supabase } from "@/integrations/supabase/client"; // No longer needed for direct calls here
+import { appointmentService } from "@/services/appointmentService"; // Import the service
+import { Appointment } from "@/types"; // Import the global Appointment type
 import { Input } from "@/components/ui/input";
 import BottomNavigation from "@/components/BottomNavigation";
 import { toast } from "sonner";
 
-interface Appointment {
-  id: string;
-  doctor: {
-    id: string;
-    full_name: string;
-    specialties?: string[];
-    profile_pic?: string;
-  };
-  specialties?: {
-    name: string;
-  }[];
-  appointment_date: string;
-  appointment_time: string;
-  status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
-  meeting_link?: string;
-  appointment_type: 'video' | 'in_person' | 'phone';
-  notes?: string;
-  location?: string;
-}
 
 export default function Appointments() {
   const navigate = useNavigate();
@@ -56,156 +39,92 @@ export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
 
+  const location = useLocation();
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [refreshKey, setRefreshKey] = useState(0); // Keep for now, might be useful
+
   useEffect(() => {
-    if (location.state?.newAppointment) {
+    // This effect can be used to highlight a new appointment if its ID is passed in location.state
+    if (location.state?.newAppointmentId) {
+      // Potentially scroll to or highlight the new appointment
+      // For now, just clear the state and allow refresh if needed
+      console.log("New appointment ID from state:", location.state.newAppointmentId);
       navigate(location.pathname, { replace: true, state: {} });
-      setRefreshKey(prev => prev + 1);
+      // setRefreshKey(prev => prev + 1); // Trigger re-fetch if needed, or rely on cache invalidation
     }
   }, [location.state, navigate]);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoading(false); // Not logged in, nothing to load
+      return;
+    }
     
-    const fetchAppointments = async () => {
+    const fetchAppointmentsForPatient = async () => {
       setLoading(true);
-      
-      // Add safety timeout to prevent infinite loading
-      const safetyTimeout = setTimeout(() => {
-        console.log("Safety timeout triggered - forcing loading to false");
-        setLoading(false);
-      }, 5000); // 5 seconds max loading time
-      
       try {
-        console.log("Fetching appointments...");
-        // In a real app, you would fetch from the database here
-        // For now, we'll use mock data, but with a twist - add the "new" appointment
-        
-        let mockAppointments: Appointment[] = [
-          {
-            id: "1",
-            doctor: {
-              id: "d1",
-              full_name: "Dr. Priya Sharma",
-              specialties: ["Cardiologist"],
-              profile_pic: "/doctor-avatar-1.png"
-            },
-            specialties: [{ name: "Cardiology" }],
-            appointment_date: new Date().toISOString().split('T')[0],
-            appointment_time: "10:30 AM",
-            status: 'confirmed',
-            meeting_link: "https://meet.google.com/abc-defg-hij",
-            appointment_type: 'video',
-            notes: "Follow-up appointment",
-            location: "Apollo Hospital, Suite 302"
-          },
-          {
-            id: "2",
-            doctor: {
-              id: "d2",
-              full_name: "Dr. Samridhi Dev",
-              specialties: ["Orthopedic"],
-              profile_pic: "/doctor-avatar-2.png"
-            },
-            specialties: [{ name: "Orthopedics" }],
-            appointment_date: new Date(Date.now() + 86400000).toISOString().split('T')[0],
-            appointment_time: "2:15 PM",
-            status: 'pending',
-            appointment_type: 'in_person',
-            location: "City Hospital, Room 405"
-          },
-          {
-            id: "3",
-            doctor: {
-              id: "d3",
-              full_name: "Dr. Koushik Das",
-              specialties: ["Neurologist"],
-              profile_pic: "/doctor-avatar-3.png"
-            },
-            specialties: [{ name: "Neurology" }],
-            appointment_date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
-            appointment_time: "11:00 AM",
-            status: 'completed',
-            appointment_type: 'video',
-            notes: "Initial consultation"
-          }
-        ];
-        
-        // Check local storage for any newly booked appointments
-        const storedAppointments = localStorage.getItem('bookedAppointments');
-        if (storedAppointments) {
-          try {
-            console.log("Found stored appointments:", storedAppointments);
-            const parsedAppointments = JSON.parse(storedAppointments) as Appointment[];
-            mockAppointments = [...mockAppointments, ...parsedAppointments];
-            console.log("Combined appointments:", mockAppointments.length);
-          } catch (error) {
-            console.error("Error parsing stored appointments:", error);
-          }
-        } else {
-          console.log("No stored appointments found");
-        }
-        
-        setAppointments(mockAppointments);
-        setFilteredAppointments(mockAppointments);
-        
-        handleDateSelection(selectedDate);
-        console.log("Appointments loaded successfully");
-      } catch (error) {
-        console.error("Error:", error);
-        toast.error("An error occurred");
+        console.log(`Fetching appointments for patient ID: ${user.id}`);
+        const fetchedAppointments = await appointmentService.getAppointmentsForPatient(user.id);
+        setAppointments(fetchedAppointments);
+        // Initial filter based on the initially selected date (today)
+        filterAppointmentsByDateAndSearch(fetchedAppointments, selectedDate, searchTerm);
+        console.log(`Appointments loaded successfully: ${fetchedAppointments.length}`);
+      } catch (error: any) {
+        console.error("Error fetching appointments:", error);
+        toast.error(`Failed to load appointments: ${error.message || "Unknown error"}`);
+        setAppointments([]); // Clear appointments on error
+        setFilteredAppointments([]);
       } finally {
-        // Clear the safety timeout
-        clearTimeout(safetyTimeout);
-        console.log("Setting loading to false");
         setLoading(false);
       }
     };
     
-    fetchAppointments();
-  }, [user?.id, refreshKey, selectedDate]); // Add selectedDate as a dependency
-  
-  useEffect(() => {
-    if (searchTerm.trim() === "") {
-      handleDateSelection(selectedDate);
-    } else {
-      const filtered = appointments.filter(
-        appointment => 
-          appointment.doctor.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          (appointment.specialties && 
-           appointment.specialties.some(s => 
-             s.name.toLowerCase().includes(searchTerm.toLowerCase())
-           ))
+    fetchAppointmentsForPatient();
+  }, [user?.id, refreshKey]); // Removed selectedDate from here, filtering is separate
+
+  // Combined filter function
+  const filterAppointmentsByDateAndSearch = (
+    sourceAppointments: Appointment[],
+    dateToFilter: Date,
+    currentSearchTerm: string
+  ) => {
+    let dateFiltered = sourceAppointments.filter(appointment => {
+      if (!appointment.appointment_date) return false;
+      // Ensure appointment_date is treated as UTC to avoid timezone issues with isSameDay
+      // Supabase date type is 'YYYY-MM-DD'. parseISO will interpret this correctly.
+      const appointmentDate = parseISO(appointment.appointment_date);
+      return isSameDay(appointmentDate, dateToFilter);
+    });
+
+    if (currentSearchTerm.trim() !== "") {
+      const lowerSearchTerm = currentSearchTerm.toLowerCase();
+      dateFiltered = dateFiltered.filter(appointment =>
+        (appointment.doctor?.full_name?.toLowerCase() || "").includes(lowerSearchTerm) ||
+        (appointment.doctor?.specialties?.[0]?.name?.toLowerCase() || "").includes(lowerSearchTerm) || // Check first specialty
+        (appointment.reason?.toLowerCase() || "").includes(lowerSearchTerm)
       );
-      setFilteredAppointments(filtered);
     }
-  }, [searchTerm, appointments]);
+    setFilteredAppointments(dateFiltered);
+  };
+
+  // Effect for handling date selection changes
+  useEffect(() => {
+    filterAppointmentsByDateAndSearch(appointments, selectedDate, searchTerm);
+  }, [selectedDate, appointments]); // Re-filter when date changes or base appointments load
+
+  // Effect for handling search term changes
+  useEffect(() => {
+    filterAppointmentsByDateAndSearch(appointments, selectedDate, searchTerm);
+  }, [searchTerm, appointments]); // Re-filter when search term changes or base appointments load
+
 
   const handleDateSelection = (date: Date) => {
-    setSelectedDate(date);
-    
-    // Don't continue if there are no appointments to filter or if we're currently searching
-    if (appointments.length === 0 || searchTerm.trim() !== "") return;
-    
-    console.log("Filtering appointments for date:", format(date, "yyyy-MM-dd"));
-    
-    // Filter appointments based on selected date
-    try {
-      const filtered = appointments.filter(appointment => {
-        if (!appointment.appointment_date) {
-          return false;
-        }
-        const appointmentDate = new Date(appointment.appointment_date);
-        const result = isSameDay(appointmentDate, date);
-        return result;
-      });
-      
-      console.log(`Found ${filtered.length} appointments for selected date`);
-      setFilteredAppointments(filtered);
-    } catch (error) {
-      console.error("Error filtering appointments:", error);
-      // Fallback to showing all appointments if filtering fails
-      setFilteredAppointments(appointments);
-    }
+    setSelectedDate(date); // This will trigger the useEffect above
   };
   
   const statusColors = {
@@ -424,9 +343,11 @@ function AppointmentCard({ appointment, navigate, statusColors, appointmentTypeI
               )}
             </Avatar>
             <div>
-              <h3 className="font-semibold text-[#004953]">Dr. {appointment.doctor.full_name}</h3>
+              <h3 className="font-semibold text-[#004953]">
+                {appointment.doctor?.full_name ? `Dr. ${appointment.doctor.full_name}` : 'N/A'}
+              </h3>
               <p className="text-xs text-gray-500 mt-0.5">
-                {appointment.specialties?.[0]?.name || "General Practitioner"}
+                {appointment.doctor?.specialties?.[0]?.name || "General Practitioner"}
               </p>
             </div>
           </div>
