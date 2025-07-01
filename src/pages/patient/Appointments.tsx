@@ -39,14 +39,14 @@ export default function Appointments() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [refreshKey, setRefreshKey] = useState(0);
 
-  const location = useLocation();
-  const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
-  const [refreshKey, setRefreshKey] = useState(0); // Keep for now, might be useful
+  // const location = useLocation(); // Already defined above
+  // const { user } = useAuth(); // Already defined above
+  // const [loading, setLoading] = useState(true); // Already defined above
+  // const [appointments, setAppointments] = useState<Appointment[]>([]); // Already defined above
+  // const [filteredAppointments, setFilteredAppointments] = useState<Appointment[]>([]); // Already defined above
+  // const [searchTerm, setSearchTerm] = useState(""); // Already defined above
+  // const [selectedDate, setSelectedDate] = useState<Date>(new Date()); // Already defined above
+  // const [refreshKey, setRefreshKey] = useState(0); // Already defined above
 
   useEffect(() => {
     // This effect can be used to highlight a new appointment if its ID is passed in location.state
