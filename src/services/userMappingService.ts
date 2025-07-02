@@ -12,40 +12,53 @@ class UserMappingService {
    * Get Firebase user ID for a given Supabase user ID
    * Creates a Firebase anonymous user if needed
    */
-  async getFirebaseUserId(supabaseUserId: string): Promise<string> {
-    try {
-      // Check if we already have a mapping
-      if (this.userIdMap.has(supabaseUserId)) {
-        const firebaseId = this.userIdMap.get(supabaseUserId)!;
-        console.log(`Using cached Firebase ID: ${firebaseId} for Supabase ID: ${supabaseUserId}`);
-        return firebaseId;
-      }
+  getFirebaseUserId(supabaseUserId: string): string {
+    // Use a deterministic approach. No async needed.
+    // No need to call firebaseAuthService.ensureAuthenticated() here,
+    // as we are mapping an ID, not performing an auth-dependent action for the *current* user.
 
-      // Ensure Firebase authentication
-      const firebaseUser = await firebaseAuthService.ensureAuthenticated();
-      const firebaseUserId = firebaseUser.uid;
-
-      // Create mapping
-      this.userIdMap.set(supabaseUserId, firebaseUserId);
-      this.reverseMap.set(firebaseUserId, supabaseUserId);
-
-      console.log(`Created mapping: Supabase ${supabaseUserId} -> Firebase ${firebaseUserId}`);
-      return firebaseUserId;
-    } catch (error) {
-      console.error('Error getting Firebase user ID:', error);
-      throw error;
+    if (!supabaseUserId) {
+      throw new Error("Supabase User ID cannot be empty or null for mapping.");
     }
+
+    // Check cache first
+    if (this.userIdMap.has(supabaseUserId)) {
+      return this.userIdMap.get(supabaseUserId)!;
+    }
+
+    const deterministicFirebaseId = this.createDeterministicFirebaseId(supabaseUserId);
+
+    // Store in cache
+    this.userIdMap.set(supabaseUserId, deterministicFirebaseId);
+    this.reverseMap.set(deterministicFirebaseId, supabaseUserId);
+
+    console.log(`Mapped Supabase ID ${supabaseUserId} to Firebase ID ${deterministicFirebaseId}`);
+    return deterministicFirebaseId;
   }
 
   /**
-   * Get Supabase user ID for a given Firebase user ID
+   * Get Supabase user ID for a given Firebase user ID (which should be a deterministic one)
    */
-  getSupabaseUserId(firebaseUserId: string): string | null {
-    return this.reverseMap.get(firebaseUserId) || null;
+  getSupabaseUserId(deterministicFirebaseId: string): string | null {
+    if (!deterministicFirebaseId) return null;
+
+    // Check cache first
+    if (this.reverseMap.has(deterministicFirebaseId)) {
+      return this.reverseMap.get(deterministicFirebaseId)!;
+    }
+
+    // If not in cache, try to derive it (e.g. if cache was cleared or this is a new session)
+    const supabaseId = this.extractSupabaseIdFromMapped(deterministicFirebaseId);
+    if (supabaseId) {
+      // Populate cache
+      this.userIdMap.set(supabaseId, deterministicFirebaseId);
+      this.reverseMap.set(deterministicFirebaseId, supabaseId);
+    }
+    return supabaseId;
   }
 
   /**
-   * Clear all mappings (useful for logout)
+   * Clear all mappings (useful for logout or context changes)
    */
   clearMappings(): void {
     this.userIdMap.clear();
@@ -54,7 +67,9 @@ class UserMappingService {
   }
 
   /**
-   * Create a deterministic Firebase-compatible user ID from Supabase ID
+   * Create a deterministic Firebase-compatible user ID from Supabase ID.
+   * Firebase UIDs can be any non-empty string, up to 128 characters.
+   * Using a prefix helps identify these as mapped UIDs.
    * This ensures the same Supabase user always gets the same Firebase ID
    */
   createDeterministicFirebaseId(supabaseUserId: string): string {

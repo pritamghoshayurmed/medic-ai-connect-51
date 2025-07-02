@@ -1,281 +1,166 @@
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+// import { supabase } from "@/integrations/supabase/client"; // No longer direct Supabase for messages
+import { firebaseChatService, FirebaseMessage } from "@/services/firebaseChatService";
+import { userMappingService } from "@/services/userMappingService";
+import { supabase } from "@/integrations/supabase/client"; // Keep for profile fetching
+import { Profile } from "@/types"; // Assuming Profile type exists for patient details
+
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Card, CardContent } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Message } from "@/types";
+// import { Card, CardContent } from "@/components/ui/card"; // Not used
+// import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Not used
+// import { Message } from "@/types"; // Using FirebaseMessage directly
 import { format } from "date-fns";
 import { ArrowLeft, Send, Image as ImageIcon, X, FileText } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import BottomNavigation from "@/components/BottomNavigation";
 
-interface ExtendedMessage extends Message {
-  imageUrl?: string;
-  prescriptionUrl?: string;
-  isAI?: boolean;
-}
+// Using FirebaseMessage as the primary message type
+// interface ExtendedMessage extends FirebaseMessage {
+//   // FirebaseMessage already includes common fields. Add specific UI ones if needed.
+//   // imageUrl?: string; // This should come from FirebaseMessage if supported
+//   // prescriptionUrl?: string; // This should come from FirebaseMessage if supported
+// }
 
-// At the beginning, define the type for messages from the database
-interface DBMessage {
-  id: string;
-  sender_id: string;
-  receiver_id: string;
-  content: string;
-  timestamp: string;
-  read: boolean;
-  image_url?: string | null;
-  prescription_url?: string | null;
-}
 
 export default function DoctorChat() {
-  const { id } = useParams<{ id: string }>();
-  const { user } = useAuth();
+  const { id: patientSupabaseId } = useParams<{ id: string }>(); // This is the patient's Supabase ID
+  const { user: doctorUser } = useAuth(); // This is the logged-in doctor
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [messages, setMessages] = useState<ExtendedMessage[]>([]);
+  const [messages, setMessages] = useState<FirebaseMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
-  const [otherUser, setOtherUser] = useState<any>(null);
+  const [patientProfile, setPatientProfile] = useState<Profile | null>(null); // For patient's name, pic
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prescriptionInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [selectedPrescription, setSelectedPrescription] = useState<File | null>(null);
-  const [activeTab, setActiveTab] = useState<string>("chat");
+  // const [activeTab, setActiveTab] = useState<string>("chat"); // Not used in this component UI
 
   useEffect(() => {
-    if (!user) return;
+    if (!doctorUser || !patientSupabaseId) {
+      setLoading(false);
+      return;
+    }
 
-    const fetchMessages = async () => {
+    let unsubscribeFromMessages: (() => void) | undefined;
+
+    const setupChat = async () => {
       try {
         setLoading(true);
-        
-        // Find which user we're chatting with
-        const otherUserId = id;
-        
-        if (!otherUserId) {
-          console.error("No chat partner ID found");
+
+        // 1. Fetch Patient Profile (for display purposes)
+        const { data: patientData, error: patientError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', patientSupabaseId)
+          .single();
+
+        if (patientError || !patientData) {
+          console.error("Error fetching patient profile:", patientError);
+          toast({ title: "Error", description: "Could not load patient details.", variant: "destructive" });
+          setLoading(false);
+          return;
+        }
+        setPatientProfile(patientData as Profile);
+
+        // 2. Get Firebase UIDs for doctor and patient
+        const doctorFirebaseId = userMappingService.getFirebaseUserId(doctorUser.id);
+        const patientFirebaseId = userMappingService.getFirebaseUserId(patientSupabaseId);
+
+        if (!doctorFirebaseId || !patientFirebaseId) {
+          console.error("Could not get Firebase UIDs for chat participants.");
+          toast({ title: "Chat Error", description: "Failed to initialize chat IDs.", variant: "destructive" });
+          setLoading(false);
           return;
         }
         
-        // Get other user details
-        const { data: userData, error: userError } = await supabase
-          .from('profiles')
-          .select(`
-            *,
-            doctor_profiles (*)
-          `)
-          .eq('id', otherUserId)
-          .single();
-          
-        if (userError) {
-          console.error("Error fetching user:", userError);
-        } else if (userData) {
-          setOtherUser({
-            ...userData,
-            profilePic: userData.doctor_profiles ? 
-              '/lovable-uploads/769f4117-004e-45a0-adf4-56b690fc298b.png' :
-              undefined
-          });
-        }
-        
-        // Get messages between the two users
-        const { data, error } = await supabase
-          .from('messages')
-          .select('*')
-          .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`)
-          .or(`sender_id.eq.${otherUserId},receiver_id.eq.${otherUserId}`)
-          .order('timestamp', { ascending: true });
-          
-        if (error) {
-          console.error("Error fetching messages:", error);
-        } else if (data) {
-          // Filter to only include messages between these two users
-          const filteredMessages = data.filter(
-            msg => 
-              (msg.sender_id === user.id && msg.receiver_id === otherUserId) || 
-              (msg.sender_id === otherUserId && msg.receiver_id === user.id)
-          );
-          
-          // Convert to our Message type
-          const typedMessages: ExtendedMessage[] = filteredMessages.map(msg => ({
-            id: msg.id,
-            sender_id: msg.sender_id,
-            receiver_id: msg.receiver_id,
-            content: msg.content,
-            timestamp: msg.timestamp,
-            read: msg.read,
-            imageUrl: null, // Default value since image_url doesn't exist in the database
-            prescriptionUrl: null, // Default value since prescription_url doesn't exist in the database
-            isAI: false // Default value since is_ai doesn't exist in the database
-          }));
-          
-          setMessages(typedMessages);
-          
-          // Mark unread messages as read
-          const unreadIds = filteredMessages
-            .filter(msg => msg.receiver_id === user.id && !msg.read)
-            .map(msg => msg.id);
-            
-          if (unreadIds.length > 0) {
-            await supabase
-              .from('messages')
-              .update({ read: true })
-              .in('id', unreadIds);
+        console.log(`Setting up chat. Doctor Firebase ID: ${doctorFirebaseId}, Patient Firebase ID: ${patientFirebaseId}`);
+
+        // 3. Listen to messages using FirebaseChatService
+        unsubscribeFromMessages = firebaseChatService.listenToDoctorPatientMessages(
+          doctorFirebaseId, // User1
+          patientFirebaseId,  // User2
+          (firebaseMessages) => {
+            setMessages(firebaseMessages);
+            // No need to setLoading(false) here if messages initially load fast
           }
-        }
+        );
+
+        // 4. Mark messages as read
+        // Doctor (current user) is reading messages sent by patient
+        await firebaseChatService.markMessagesAsRead(doctorFirebaseId, patientFirebaseId);
+
       } catch (err) {
-        console.error("Error in chat:", err);
+        console.error("Error setting up chat:", err);
+        toast({ title: "Chat Setup Error", description: (err as Error).message, variant: "destructive" });
       } finally {
+        // Initial loading is done after setup attempt
+        // Further loading controlled by message stream if needed
         setLoading(false);
       }
     };
 
-    fetchMessages();
-    
-    // Set up real-time subscription for new messages
-    const subscription = supabase
-      .channel('doctor-chat')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'messages'
-      }, (payload) => {
-        const newMsg = payload.new as DBMessage;
-        
-        // Only process messages that are part of this conversation
-        if ((newMsg.sender_id === user.id && newMsg.receiver_id === id) || 
-            (newMsg.sender_id === id && newMsg.receiver_id === user.id)) {
-          
-          // Format the message to match our expected structure
-          const formattedMsg: ExtendedMessage = {
-            id: newMsg.id,
-            sender_id: newMsg.sender_id,
-            receiver_id: newMsg.receiver_id,
-            content: newMsg.content,
-            timestamp: newMsg.timestamp,
-            read: newMsg.read,
-            imageUrl: newMsg.image_url || null,
-            prescriptionUrl: newMsg.prescription_url || null,
-            isAI: false // Default value since is_ai doesn't exist in the database
-          };
-          
-          // Add to messages if not already there
-          setMessages(prev => {
-            if (prev.some(msg => msg.id === formattedMsg.id)) return prev;
-            return [...prev, formattedMsg];
-          });
-          
-          // Mark as read if we're the receiver
-          if (newMsg.receiver_id === user.id && !newMsg.read) {
-            supabase
-              .from('messages')
-              .update({ read: true })
-              .eq('id', newMsg.id);
-          }
-        }
-      })
-      .subscribe();
-      
+    setupChat();
+
     return () => {
-      subscription.unsubscribe();
+      if (unsubscribeFromMessages) {
+        unsubscribeFromMessages();
+      }
     };
-  }, [user, id]);
+  }, [doctorUser, patientSupabaseId, toast]);
 
   // Scroll to bottom whenever messages change
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (messages.length > 0) { // Only scroll if there are messages
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   const sendMessage = async () => {
-    // Check if message is empty or user/id is not available
-    if (!newMessage.trim() || !user || !id) return;
+    if (!newMessage.trim() || !doctorUser || !patientSupabaseId || !patientProfile) {
+      toast({ title: "Cannot send", description: "Message is empty or user data is missing.", variant: "warning"});
+      return;
+    }
     
+    const doctorFirebaseId = userMappingService.getFirebaseUserId(doctorUser.id);
+    const patientFirebaseId = userMappingService.getFirebaseUserId(patientSupabaseId);
+
+    if (!doctorFirebaseId || !patientFirebaseId) {
+      toast({ title: "Error", description: "Could not resolve user IDs for sending message.", variant: "destructive"});
+      return;
+    }
+
+    const messageContent = newMessage.trim();
+    setNewMessage(""); // Clear input immediately
+
     try {
-      // Create timestamp for message
-      const timestamp = new Date().toISOString();
-      const tempMessageId = `temp-${Date.now()}`;
-      const messageContent = newMessage.trim();
-      
-      // Create optimistic message for UI
-      const optimisticMessage: ExtendedMessage = {
-        id: tempMessageId,
-        sender_id: user.id,
-        receiver_id: id,
-        content: messageContent,
-        timestamp: timestamp,
-        read: false,
-        imageUrl: null,
-        prescriptionUrl: null,
-        isAI: false
-      };
-      
-      // Update UI immediately with optimistic message
-      setMessages(prev => [...prev, optimisticMessage]);
-      
-      // Clear the input
-      setNewMessage("");
-      
-      // Define the message to save - only include fields that exist in the database
-      const messageToSave = {
-        sender_id: user.id,
-        receiver_id: id,
-        content: messageContent,
-        read: false,
-        timestamp: timestamp
-      };
-      
-      console.log("Sending message:", JSON.stringify(messageToSave));
-      
-      // Insert the message
-      const { data, error } = await supabase
-        .from('messages')
-        .insert(messageToSave)
-        .select();
-      
-      if (error) {
-        console.error("Error sending message:", error);
-        // Remove the optimistic message on error
-        setMessages(prev => prev.filter(msg => msg.id !== tempMessageId));
-        toast({
-          title: "Error",
-          description: "Failed to send message. Please try again.",
-          variant: "destructive",
-        });
-        return;
-      }
-      
-      // Replace optimistic message with real message
-      if (data && data.length > 0) {
-        const dbMessage = data[0] as DBMessage;
-        const finalMessage: ExtendedMessage = {
-          id: dbMessage.id,
-          sender_id: dbMessage.sender_id,
-          receiver_id: dbMessage.receiver_id,
-          content: dbMessage.content,
-          timestamp: dbMessage.timestamp,
-          read: dbMessage.read,
-          imageUrl: dbMessage.image_url || null,
-          prescriptionUrl: dbMessage.prescription_url || null,
-          isAI: false // Default value since is_ai doesn't exist in the database
-        };
-        
-        setMessages(prev => prev.map(msg => 
-          msg.id === tempMessageId ? finalMessage : msg
-        ));
-      }
-      
+      // Optimistic UI update (optional, but good for UX)
+      // const optimisticMessage: FirebaseMessage = { ... };
+      // setMessages(prev => [...prev, optimisticMessage]);
+
+      await firebaseChatService.sendDoctorPatientMessage(
+        doctorFirebaseId, // sender
+        patientFirebaseId,  // receiver
+        messageContent,
+        doctorUser.name || doctorUser.email || "Doctor", // Sender's name
+        doctorUser.role as 'doctor' | 'patient' // Sender's role
+      );
+      console.log("Message sent via FirebaseChatService.");
+
     } catch (err) {
-      console.error("Error in sendMessage:", err);
+      console.error("Error sending message via FirebaseChatService:", err);
       toast({
         title: "Error",
         description: "Failed to send message. Please try again.",
         variant: "destructive",
       });
+      setNewMessage(messageContent); // Restore message on error
     }
   };
 

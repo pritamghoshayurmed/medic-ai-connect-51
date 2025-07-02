@@ -1,5 +1,5 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import { Home, Activity, Search, MessageSquare, User, Calendar, Stethoscope } from "lucide-react";
+import { Home, Activity, Search, MessageSquare, User, Calendar, Stethoscope, FileText as ArticlesIcon } from "lucide-react"; // Added ArticlesIcon
 import { useAuth } from "@/contexts/AuthContext";
 
 export function BottomNavigation() {
@@ -64,6 +64,11 @@ export function BottomNavigation() {
       label: "Find Doctor",
       path: "/patient/find-doctor",
     },
+    { // New Articles Item
+      icon: <ArticlesIcon size={22} />,
+      label: "Articles",
+      path: "/patient/articles",
+    },
     {
       icon: <MessageSquare size={22} />,
       label: "Chat",
@@ -77,14 +82,16 @@ export function BottomNavigation() {
   ];
 
   // Select the appropriate navigation items based on user role
-  const navigationItems = user?.role === "doctor" ? doctorNavigationItems : patientNavigationItems;
+  const itemsToDisplay = user?.role === "doctor" ? doctorNavigationItems : patientNavigationItems;
+  const itemWidthClass = itemsToDisplay.length === 5 ? "w-1/5" : itemsToDisplay.length === 6 ? "w-1/6" : "w-auto";
+
 
   return (
     <div className="fixed bottom-0 left-0 right-0 bg-white border-t h-[70px] flex justify-around items-center z-50">
-      {navigationItems.map((item, index) => (
+      {itemsToDisplay.map((item, index) => (
         <button
           key={index}
-          className={`flex flex-col items-center justify-center w-1/5 h-full ${
+          className={`flex flex-col items-center justify-center h-full ${itemWidthClass} ${
             isActive(item.path) ? "text-[#00C389]" : "text-muted-foreground"
           }`}
           onClick={() => navigate(item.path)}
