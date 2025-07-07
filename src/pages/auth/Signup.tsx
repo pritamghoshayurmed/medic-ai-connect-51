@@ -234,7 +234,7 @@ const SignUp: React.FC = () => {
     <Container>
       <Screen>
         <LogoContainer>
-          <Logo src="/logo.png" alt="Kabiraj AI Logo" />
+          <Logo src="/src/pages/pnglogo copy.png" alt="Kabiraj AI Logo" />
         </LogoContainer>
         <Title>Create Your Account</Title>
         <Subtitle>Join Kabiraj AI to manage your health</Subtitle>
