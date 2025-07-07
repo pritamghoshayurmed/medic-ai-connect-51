@@ -135,7 +135,7 @@ const ForgotPassword: React.FC = () => {
     <Container>
       <Screen>
         <LogoContainer>
-          <Logo src="/logo.png" alt="Kabiraj AI Logo" />
+          <Logo src="/src/pages/pnglogo copy.png" alt="Kabiraj AI Logo" />
         </LogoContainer>
         <Title>Forgot Password</Title>
         <Subtitle>Enter your email to reset your password</Subtitle>

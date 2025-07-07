@@ -62,7 +62,7 @@ const SplashScreen: React.FC = () => {
 
   return (
     <SplashContainer>
-      <SplashLogo src="/logo.png" alt="Kabiraj AI Logo" />
+      <SplashLogo src="/src/pages/pnglogo copy.png" alt="Kabiraj AI Logo" />
       <SplashTitle>KABIRAJ AI</SplashTitle>
       <GetStartedButton onClick={handleGetStarted}>
         Get Started
